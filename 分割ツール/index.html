@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF分割ツール</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+    <style>
+        .pdf-splitter-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        
+        .upload-area {
+            border: 3px dashed #ccc;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            margin-bottom: 30px;
+            background-color: #f9f9f9;
+            transition: all 0.3s ease;
+        }
+        
+        .upload-area:hover {
+            border-color: #007bff;
+            background-color: #f0f8ff;
+        }
+        
+        .upload-area.dragover {
+            border-color: #007bff;
+            background-color: #e6f2ff;
+        }
+        
+        .file-input-label {
+            display: inline-block;
+            padding: 12px 30px;
+            background-color: #007bff;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s ease;
+        }
+        
+        .file-input-label:hover {
+            background-color: #0056b3;
+        }
+        
+        input[type="file"] {
+            display: none;
+        }
+        
+        .file-info {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #e9ecef;
+            border-radius: 5px;
+            display: none;
+        }
+        
+        .split-options {
+            margin: 30px 0;
+            padding: 20px;
+            background-color: #fff;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            display: none;
+        }
+        
+        .option-group {
+            margin-bottom: 20px;
+        }
+        
+        .option-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .radio-group {
+            margin: 10px 0;
+        }
+        
+        .radio-group input[type="radio"] {
+            margin-right: 8px;
+        }
+        
+        .radio-group label {
+            display: inline;
+            font-weight: normal;
+            margin-right: 20px;
+        }
+        
+        input[type="number"],
+        input[type="text"] {
+            width: 100%;
+            max-width: 300px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        
+        .helper-text {
+            font-size: 13px;
+            color: #666;
+            margin-top: 5px;
+        }
+        
+        .split-button {
+            padding: 15px 40px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 18px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            display: none;
+        }
+        
+        .split-button:hover {
+            background-color: #218838;
+        }
+        
+        .split-button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .progress {
+            margin: 20px 0;
+            display: none;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background-color: #e9ecef;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background-color: #007bff;
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+        
+        .result {
+            margin-top: 30px;
+            display: none;
+        }
+        
+        .success-message {
+            padding: 15px;
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            border-radius: 5px;
+            color: #155724;
+            margin-bottom: 20px;
+        }
+        
+        .error-message {
+            padding: 15px;
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            border-radius: 5px;
+            color: #721c24;
+            margin-bottom: 20px;
+        }
+        
+        .reset-button {
+            padding: 10px 25px;
+            background-color: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        
+        .reset-button:hover {
+            background-color: #5a6268;
+        }
+    </style>
+</head>
+<body>
+    <div class="pdf-splitter-container">
+        <h1 style="text-align: center; color: #333;">PDF分割ツール</h1>
+        <p style="text-align: center; color: #666;">PDFファイルをページごとに分割できます。すべての処理はブラウザ内で行われ、ファイルは外部に送信されません。</p>
+        
+        <div class="upload-area" id="uploadArea">
+            <p style="font-size: 18px; color: #666; margin-bottom: 15px;">
+                📄 PDFファイルをドラッグ&ドロップ<br>または
+            </p>
+            <label for="pdfFile" class="file-input-label">
+                ファイルを選択
+            </label>
+            <input type="file" id="pdfFile" accept=".pdf">
+        </div>
+        
+        <div class="file-info" id="fileInfo">
+            <strong>選択されたファイル:</strong> <span id="fileName"></span><br>
+            <strong>ページ数:</strong> <span id="pageCount"></span>
+        </div>
+        
+        <div class="split-options" id="splitOptions">
+            <h3>分割方法を選択</h3>
+            
+            <div class="option-group">
+                <div class="radio-group">
+                    <input type="radio" id="splitAll" name="splitMethod" value="all" checked>
+                    <label for="splitAll">すべてのページを個別に分割</label>
+                </div>
+                <div class="helper-text">各ページが1つずつのPDFファイルになります</div>
+            </div>
+            
+            <div class="option-group">
+                <div class="radio-group">
+                    <input type="radio" id="splitRange" name="splitMethod" value="range">
+                    <label for="splitRange">ページ範囲を指定</label>
+                </div>
+                <div id="rangeInput" style="margin-top: 10px; display: none;">
+                    <label>ページ範囲（例: 1-3, 5, 7-9）:</label>
+                    <input type="text" id="pageRange" placeholder="1-3, 5, 7-9">
+                    <div class="helper-text">カンマで区切って複数の範囲を指定できます</div>
+                </div>
+            </div>
+            
+            <div class="option-group">
+                <div class="radio-group">
+                    <input type="radio" id="splitEvery" name="splitMethod" value="every">
+                    <label for="splitEvery">指定したページ数ごとに分割</label>
+                </div>
+                <div id="everyInput" style="margin-top: 10px; display: none;">
+                    <label>何ページごとに分割:</label>
+                    <input type="number" id="everyPages" min="1" value="2">
+                    <div class="helper-text">例: 2を指定すると2ページずつのPDFになります</div>
+                </div>
+            </div>
+        </div>
+        
+        <div style="text-align: center; margin-top: 30px;">
+            <button class="split-button" id="splitButton">分割を実行</button>
+        </div>
+        
+        <div class="progress" id="progress">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill" style="width: 0%;">0%</div>
+            </div>
+        </div>
+        
+        <div class="result" id="result"></div>
+    </div>
+
+    <script>
+        const { PDFDocument } = PDFLib;
+        
+        let pdfDoc = null;
+        let pdfBytes = null;
+        
+        const uploadArea = document.getElementById('uploadArea');
+        const pdfFileInput = document.getElementById('pdfFile');
+        const fileInfo = document.getElementById('fileInfo');
+        const fileName = document.getElementById('fileName');
+        const pageCount = document.getElementById('pageCount');
+        const splitOptions = document.getElementById('splitOptions');
+        const splitButton = document.getElementById('splitButton');
+        const progress = document.getElementById('progress');
+        const progressFill = document.getElementById('progressFill');
+        const result = document.getElementById('result');
+        
+        // ラジオボタンの変更イベント
+        document.querySelectorAll('input[name="splitMethod"]').forEach(radio => {
+            radio.addEventListener('change', function() {
+                document.getElementById('rangeInput').style.display = 
+                    this.value === 'range' ? 'block' : 'none';
+                document.getElementById('everyInput').style.display = 
+                    this.value === 'every' ? 'block' : 'none';
+            });
+        });
+        
+        // ドラッグ&ドロップ
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0 && files[0].type === 'application/pdf') {
+                handleFile(files[0]);
+            }
+        });
+        
+        pdfFileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+        
+        async function handleFile(file) {
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                pdfBytes = arrayBuffer;
+                pdfDoc = await PDFDocument.load(arrayBuffer);
+                
+                const numPages = pdfDoc.getPageCount();
+                
+                fileName.textContent = file.name;
+                pageCount.textContent = `${numPages}ページ`;
+                
+                fileInfo.style.display = 'block';
+                splitOptions.style.display = 'block';
+                splitButton.style.display = 'inline-block';
+                result.style.display = 'none';
+                
+            } catch (error) {
+                showError('PDFファイルの読み込みに失敗しました: ' + error.message);
+            }
+        }
+        
+        splitButton.addEventListener('click', async () => {
+            const method = document.querySelector('input[name="splitMethod"]:checked').value;
+            
+            splitButton.disabled = true;
+            progress.style.display = 'block';
+            result.style.display = 'none';
+            
+            try {
+                if (method === 'all') {
+                    await splitAllPages();
+                } else if (method === 'range') {
+                    await splitByRange();
+                } else if (method === 'every') {
+                    await splitEveryNPages();
+                }
+                showSuccess('分割が完了しました！');
+            } catch (error) {
+                showError('分割中にエラーが発生しました: ' + error.message);
+            }
+            
+            splitButton.disabled = false;
+        });
+        
+        async function splitAllPages() {
+            const numPages = pdfDoc.getPageCount();
+            
+            for (let i = 0; i < numPages; i++) {
+                const newPdf = await PDFDocument.create();
+                const [copiedPage] = await newPdf.copyPages(pdfDoc, [i]);
+                newPdf.addPage(copiedPage);
+                
+                const pdfBytes = await newPdf.save();
+                downloadPDF(pdfBytes, `page_${i + 1}.pdf`);
+                
+                updateProgress((i + 1) / numPages * 100);
+            }
+        }
+        
+        async function splitByRange() {
+            const rangeInput = document.getElementById('pageRange').value;
+            const ranges = parsePageRanges(rangeInput, pdfDoc.getPageCount());
+            
+            if (ranges.length === 0) {
+                throw new Error('有効なページ範囲を入力してください');
+            }
+            
+            for (let i = 0; i < ranges.length; i++) {
+                const range = ranges[i];
+                const newPdf = await PDFDocument.create();
+                const copiedPages = await newPdf.copyPages(pdfDoc, range);
+                copiedPages.forEach(page => newPdf.addPage(page));
+                
+                const pdfBytes = await newPdf.save();
+                const rangeStr = range.length === 1 ? 
+                    `page_${range[0] + 1}` : 
+                    `pages_${range[0] + 1}-${range[range.length - 1] + 1}`;
+                downloadPDF(pdfBytes, `${rangeStr}.pdf`);
+                
+                updateProgress((i + 1) / ranges.length * 100);
+            }
+        }
+        
+        async function splitEveryNPages() {
+            const everyN = parseInt(document.getElementById('everyPages').value);
+            const numPages = pdfDoc.getPageCount();
+            
+            if (everyN < 1) {
+                throw new Error('1以上の数値を入力してください');
+            }
+            
+            let fileCount = 0;
+            for (let i = 0; i < numPages; i += everyN) {
+                const newPdf = await PDFDocument.create();
+                const end = Math.min(i + everyN, numPages);
+                const pageIndices = Array.from({length: end - i}, (_, idx) => i + idx);
+                
+                const copiedPages = await newPdf.copyPages(pdfDoc, pageIndices);
+                copiedPages.forEach(page => newPdf.addPage(page));
+                
+                const pdfBytes = await newPdf.save();
+                const startPage = i + 1;
+                const endPage = end;
+                downloadPDF(pdfBytes, `pages_${startPage}-${endPage}.pdf`);
+                
+                fileCount++;
+                updateProgress((end / numPages) * 100);
+            }
+        }
+        
+        function parsePageRanges(input, maxPages) {
+            const ranges = [];
+            const parts = input.split(',').map(s => s.trim());
+            
+            for (const part of parts) {
+                if (part.includes('-')) {
+                    const [start, end] = part.split('-').map(s => parseInt(s.trim()));
+                    if (start >= 1 && end <= maxPages && start <= end) {
+                        ranges.push(Array.from({length: end - start + 1}, (_, i) => start - 1 + i));
+                    }
+                } else {
+                    const page = parseInt(part);
+                    if (page >= 1 && page <= maxPages) {
+                        ranges.push([page - 1]);
+                    }
+                }
+            }
+            
+            return ranges;
+        }
+        
+        function downloadPDF(pdfBytes, filename) {
+            const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+        
+        function updateProgress(percent) {
+            const rounded = Math.round(percent);
+            progressFill.style.width = `${rounded}%`;
+            progressFill.textContent = `${rounded}%`;
+        }
+        
+        function showSuccess(message) {
+            result.innerHTML = `
+                <div class="success-message">
+                    ✅ ${message}
+                </div>
+                <button class="reset-button" onclick="resetForm()">別のファイルを分割</button>
+            `;
+            result.style.display = 'block';
+            progress.style.display = 'none';
+        }
+        
+        function showError(message) {
+            result.innerHTML = `
+                <div class="error-message">
+                    ❌ ${message}
+                </div>
+                <button class="reset-button" onclick="resetForm()">やり直す</button>
+            `;
+            result.style.display = 'block';
+            progress.style.display = 'none';
+        }
+        
+        function resetForm() {
+            pdfDoc = null;
+            pdfBytes = null;
+            pdfFileInput.value = '';
+            fileInfo.style.display = 'none';
+            splitOptions.style.display = 'none';
+            splitButton.style.display = 'none';
+            result.style.display = 'none';
+            progress.style.display = 'none';
+            progressFill.style.width = '0%';
+            progressFill.textContent = '0%';
+        }
+    </script>
+</body>
+</html>
