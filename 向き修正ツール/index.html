@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF向き修正ツール</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 { text-align: center; color: #333; margin-bottom: 8px; }
+
+        .subtitle { text-align: center; color: #666; margin-bottom: 30px; }
+
+        .upload-area {
+            border: 3px dashed #ccc;
+            border-radius: 12px;
+            padding: 50px;
+            text-align: center;
+            background: white;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+
+        .upload-area:hover, .upload-area.dragover {
+            border-color: #007bff;
+            background: #f0f8ff;
+        }
+
+        .upload-btn {
+            display: inline-block;
+            padding: 12px 30px;
+            background: #007bff;
+            color: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 15px;
+            transition: background 0.2s;
+        }
+
+        .upload-btn:hover { background: #0056b3; }
+        input[type="file"] { display: none; }
+
+        .editor {
+            display: none;
+        }
+
+        .toolbar {
+            background: white;
+            border-radius: 10px;
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+
+        .toolbar-title {
+            font-weight: bold;
+            color: #333;
+            font-size: 15px;
+        }
+
+        .auto-detect-btn {
+            padding: 10px 25px;
+            background: #6f42c1;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+
+        .auto-detect-btn:hover { background: #5a32a3; }
+        .auto-detect-btn:disabled { background: #ccc; cursor: not-allowed; }
+
+        .save-btn {
+            padding: 10px 25px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+
+        .save-btn:hover { background: #218838; }
+
+        .reset-btn {
+            padding: 10px 25px;
+            background: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .reset-btn:hover { background: #5a6268; }
+
+        .page-count {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .info-box {
+            background: #e8f4fd;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+            padding: 12px 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+
+        .pages-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .page-card {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            text-align: center;
+            transition: box-shadow 0.2s;
+        }
+
+        .page-card:hover {
+            box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+        }
+
+        .page-card.auto-fixed {
+            border: 2px solid #6f42c1;
+        }
+
+        .page-card.rotated {
+            border: 2px solid #28a745;
+        }
+
+        .canvas-wrapper {
+            position: relative;
+            display: inline-block;
+            overflow: hidden;
+            border-radius: 5px;
+            border: 1px solid #eee;
+            width: 100%;
+            margin-bottom: 12px;
+        }
+
+        .page-canvas {
+            display: block;
+            width: 100%;
+            height: auto;
+            transition: transform 0.4s ease;
+        }
+
+        .page-label {
+            font-weight: bold;
+            color: #007bff;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .rotation-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            margin-bottom: 10px;
+            background: #e9ecef;
+            color: #666;
+        }
+
+        .rotation-badge.changed {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .rotation-badge.auto {
+            background: #e2d9f3;
+            color: #6f42c1;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 6px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .rotate-btn {
+            padding: 6px 12px;
+            border: 1px solid #ddd;
+            background: white;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+
+        .rotate-btn:hover { background: #f0f0f0; }
+
+        .rotate-left { color: #007bff; border-color: #007bff; }
+        .rotate-left:hover { background: #e7f0ff; }
+
+        .rotate-right { color: #007bff; border-color: #007bff; }
+        .rotate-right:hover { background: #e7f0ff; }
+
+        .rotate-180 { color: #fd7e14; border-color: #fd7e14; }
+        .rotate-180:hover { background: #fff3e0; }
+
+        .reset-page-btn { color: #dc3545; border-color: #dc3545; }
+        .reset-page-btn:hover { background: #ffeaea; }
+
+        .auto-badge {
+            background: #e2d9f3;
+            color: #6f42c1;
+            border: none;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+
+        .progress {
+            display: none;
+            margin: 20px 0;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background: #e9ecef;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #007bff, #6f42c1);
+            transition: width 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .progress-label {
+            text-align: center;
+            margin-top: 8px;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .success-box {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+            padding: 12px 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+            font-weight: bold;
+            display: none;
+        }
+
+        .bottom-toolbar {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>PDF向き修正ツール</h1>
+    <p class="subtitle">スキャンしたPDFの縦横の向きを自動検出・手動で修正できます</p>
+
+    <!-- アップロード -->
+    <div class="upload-area" id="uploadArea">
+        <p style="font-size: 40px; margin-bottom: 10px;">📄</p>
+        <p style="font-size: 18px; color: #555;">PDFファイルをドラッグ&ドロップ</p>
+        <p style="color: #999; margin: 8px 0;">または</p>
+        <label for="pdfFile" class="upload-btn">ファイルを選択</label>
+        <input type="file" id="pdfFile" accept=".pdf">
+        <p style="font-size: 13px; color: #aaa; margin-top: 15px;">1ページ・複数ページ、どちらも対応</p>
+    </div>
+
+    <!-- プログレスバー -->
+    <div class="progress" id="progress">
+        <div class="progress-bar">
+            <div class="progress-fill" id="progressFill" style="width: 0%">0%</div>
+        </div>
+        <div class="progress-label" id="progressLabel">読み込み中...</div>
+    </div>
+
+    <!-- エディター -->
+    <div class="editor" id="editor">
+
+        <div class="toolbar">
+            <span class="toolbar-title">🔧 向き修正ツール</span>
+            <span class="page-count" id="pageCount"></span>
+            <button class="auto-detect-btn" id="autoDetectBtn">🔍 自動で向きを検出・修正</button>
+            <button class="save-btn" id="saveBtn">💾 修正して保存</button>
+            <button class="reset-btn" id="resetAllBtn">↺ すべてリセット</button>
+        </div>
+
+        <div class="info-box" id="infoBox">
+            💡 <strong>使い方：</strong>
+            「自動で向きを検出・修正」ボタンで自動修正、または各ページの「↶ 左90°」「↷ 右90°」「↕ 180°」ボタンで手動調整できます。修正後は「修正して保存」でダウンロード。
+        </div>
+
+        <div class="success-box" id="successBox"></div>
+
+        <div class="pages-grid" id="pagesGrid"></div>
+
+        <div class="bottom-toolbar">
+            <button class="auto-detect-btn" id="autoDetectBtn2">🔍 自動で向きを検出・修正</button>
+            <button class="save-btn" id="saveBtn2">💾 修正して保存</button>
+            <button class="reset-btn" id="newFileBtn">🔄 別のファイルを開く</button>
+        </div>
+    </div>
+</div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+
+let pdfJsDoc = null;
+let pdfBytes = null;
+let totalPages = 0;
+let rotations = {};   // pageNum → cumulative degrees (0/90/180/270)
+let autoFixed = new Set();
+
+const uploadArea  = document.getElementById('uploadArea');
+const pdfFileInput= document.getElementById('pdfFile');
+const editor      = document.getElementById('editor');
+const pagesGrid   = document.getElementById('pagesGrid');
+const pageCountEl = document.getElementById('pageCount');
+const progress    = document.getElementById('progress');
+const progressFill= document.getElementById('progressFill');
+const progressLabel=document.getElementById('progressLabel');
+const successBox  = document.getElementById('successBox');
+
+// ── Upload ─────────────────────────────────────────
+uploadArea.addEventListener('dragover', e => { e.preventDefault(); uploadArea.classList.add('dragover'); });
+uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+uploadArea.addEventListener('drop', e => {
+    e.preventDefault(); uploadArea.classList.remove('dragover');
+    const f = e.dataTransfer.files[0];
+    if (f && f.type === 'application/pdf') loadPDF(f);
+});
+pdfFileInput.addEventListener('change', e => { if (e.target.files[0]) loadPDF(e.target.files[0]); });
+
+async function loadPDF(file) {
+    showProgress(10, 'PDFを読み込み中...');
+    try {
+        const buf = await file.arrayBuffer();
+        pdfBytes = buf;
+        pdfJsDoc = await pdfjsLib.getDocument({ data: buf }).promise;
+        totalPages = pdfJsDoc.numPages;
+        rotations = {};
+        autoFixed.clear();
+
+        uploadArea.style.display = 'none';
+        editor.style.display = 'block';
+        pageCountEl.textContent = `全 ${totalPages} ページ`;
+
+        await renderAllPages();
+        hideProgress();
+    } catch(e) {
+        alert('読み込みエラー: ' + e.message);
+        hideProgress();
+    }
+}
+
+async function renderAllPages() {
+    pagesGrid.innerHTML = '';
+    for (let i = 1; i <= totalPages; i++) {
+        showProgress(Math.round((i / totalPages) * 80) + 10, `ページ ${i} / ${totalPages} を描画中...`);
+        const card = await createPageCard(i);
+        pagesGrid.appendChild(card);
+    }
+}
+
+async function createPageCard(pageNum) {
+    const page = await pdfJsDoc.getPage(pageNum);
+    const vp   = page.getViewport({ scale: 0.6 });
+
+    const card = document.createElement('div');
+    card.className = 'page-card';
+    card.id = `card-${pageNum}`;
+
+    const label = document.createElement('div');
+    label.className = 'page-label';
+    label.textContent = `ページ ${pageNum}`;
+
+    const badge = document.createElement('div');
+    badge.className = 'rotation-badge';
+    badge.id = `badge-${pageNum}`;
+    badge.textContent = '変更なし';
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'canvas-wrapper';
+    // fixed height so the card doesn't jump
+    wrapper.style.height = vp.height + 'px';
+
+    const canvas = document.createElement('canvas');
+    canvas.id = `canvas-${pageNum}`;
+    canvas.width  = vp.width;
+    canvas.height = vp.height;
+    canvas.className = 'page-canvas';
+
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+    wrapper.appendChild(canvas);
+
+    const btnGroup = document.createElement('div');
+    btnGroup.className = 'btn-group';
+    btnGroup.innerHTML = `
+        <button class="rotate-btn rotate-left"  onclick="rotatePage(${pageNum},-90)">↶ 左90°</button>
+        <button class="rotate-btn rotate-right" onclick="rotatePage(${pageNum}, 90)">↷ 右90°</button>
+        <button class="rotate-btn rotate-180"   onclick="rotatePage(${pageNum},180)">↕ 180°</button>
+        <button class="rotate-btn reset-page-btn" onclick="resetPage(${pageNum})">✕ リセット</button>
+    `;
+
+    card.appendChild(label);
+    card.appendChild(badge);
+    card.appendChild(wrapper);
+    card.appendChild(btnGroup);
+    return card;
+}
+
+// ── Rotate helpers ──────────────────────────────────
+window.rotatePage = function(pageNum, degrees) {
+    rotations[pageNum] = ((rotations[pageNum] || 0) + degrees + 360) % 360;
+    updateCardVisual(pageNum, false);
+};
+
+window.resetPage = function(pageNum) {
+    delete rotations[pageNum];
+    autoFixed.delete(pageNum);
+    updateCardVisual(pageNum, false);
+};
+
+function updateCardVisual(pageNum, isAuto) {
+    const canvas = document.getElementById(`canvas-${pageNum}`);
+    const badge  = document.getElementById(`badge-${pageNum}`);
+    const card   = document.getElementById(`card-${pageNum}`);
+    const deg    = rotations[pageNum] || 0;
+
+    // CSS rotate for instant visual feedback
+    canvas.style.transform = `rotate(${deg}deg)`;
+
+    // adjust wrapper height to avoid clipping
+    const wrapper = canvas.parentElement;
+    if (deg === 90 || deg === 270) {
+        wrapper.style.height = canvas.width + 'px';
+    } else {
+        wrapper.style.height = canvas.height + 'px';
+    }
+
+    if (deg === 0) {
+        badge.textContent = '変更なし';
+        badge.className = 'rotation-badge';
+        card.className = 'page-card';
+    } else if (isAuto) {
+        badge.textContent = `自動修正: ${deg}° 回転`;
+        badge.className = 'rotation-badge auto';
+        card.className = 'page-card auto-fixed';
+    } else {
+        badge.textContent = `${deg}° 回転`;
+        badge.className = 'rotation-badge changed';
+        card.className = 'page-card rotated';
+    }
+}
+
+// ── Auto detect ─────────────────────────────────────
+async function autoDetect() {
+    document.getElementById('autoDetectBtn').disabled = true;
+    document.getElementById('autoDetectBtn2').disabled = true;
+    showProgress(0, '自動検出中... （ページ数によって数十秒かかります）');
+
+    for (let i = 1; i <= totalPages; i++) {
+        showProgress(Math.round((i / totalPages) * 90), `ページ ${i} / ${totalPages} を解析中...`);
+        try {
+            const page = await pdfJsDoc.getPage(i);
+            const vp   = page.getViewport({ scale: 1.5 });
+            const cv   = document.createElement('canvas');
+            cv.width   = vp.width;
+            cv.height  = vp.height;
+            await page.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise;
+
+            const result = await Tesseract.recognize(cv.toDataURL('image/png'), 'jpn+eng', {});
+            const detected = result.data.orientation_degrees || 0;
+
+            if (detected !== 0) {
+                // Tesseract reports how much the image is rotated; we correct by the opposite
+                const correction = (360 - detected) % 360;
+                rotations[i] = correction;
+                autoFixed.add(i);
+                updateCardVisual(i, true);
+            }
+        } catch(e) {
+            console.warn(`Page ${i} OCR failed:`, e);
+        }
+    }
+
+    hideProgress();
+    document.getElementById('autoDetectBtn').disabled = false;
+    document.getElementById('autoDetectBtn2').disabled = false;
+
+    const fixedCount = autoFixed.size;
+    showSuccess(fixedCount > 0
+        ? `✅ ${fixedCount} ページの向きを自動修正しました。内容を確認して「保存」ボタンをクリックしてください。`
+        : '✅ すべてのページの向きは正常です（修正不要）。'
+    );
+}
+
+document.getElementById('autoDetectBtn').addEventListener('click', autoDetect);
+document.getElementById('autoDetectBtn2').addEventListener('click', autoDetect);
+
+// ── Save ────────────────────────────────────────────
+async function savePDF() {
+    const hasChanges = Object.keys(rotations).some(k => rotations[k] !== 0);
+    if (!hasChanges) { alert('修正されたページがありません。'); return; }
+
+    showProgress(10, 'PDF保存中...');
+    try {
+        const doc  = await PDFLib.PDFDocument.load(pdfBytes);
+        const pages = doc.getPages();
+
+        Object.keys(rotations).forEach(k => {
+            const deg = rotations[k];
+            if (deg !== 0) {
+                const page = pages[parseInt(k) - 1];
+                const current = page.getRotation().angle;
+                page.setRotation(PDFLib.degrees((current + deg) % 360));
+            }
+        });
+
+        showProgress(70, 'ファイルを生成中...');
+        const saved = await doc.save();
+        download(saved, 'orientation_fixed.pdf');
+        showProgress(100, '完了！');
+        setTimeout(hideProgress, 500);
+        showSuccess('✅ 修正済みPDFをダウンロードしました！');
+    } catch(e) {
+        alert('保存エラー: ' + e.message);
+        hideProgress();
+    }
+}
+
+document.getElementById('saveBtn').addEventListener('click', savePDF);
+document.getElementById('saveBtn2').addEventListener('click', savePDF);
+
+// ── Reset all ────────────────────────────────────────
+document.getElementById('resetAllBtn').addEventListener('click', () => {
+    if (!confirm('すべてのページの修正をリセットしますか？')) return;
+    rotations = {};
+    autoFixed.clear();
+    for (let i = 1; i <= totalPages; i++) updateCardVisual(i, false);
+    successBox.style.display = 'none';
+});
+
+document.getElementById('newFileBtn').addEventListener('click', () => location.reload());
+
+// ── Utility ──────────────────────────────────────────
+function showProgress(pct, label) {
+    progress.style.display = 'block';
+    progressFill.style.width = pct + '%';
+    progressFill.textContent = pct + '%';
+    progressLabel.textContent = label;
+}
+function hideProgress() { progress.style.display = 'none'; }
+
+function showSuccess(msg) {
+    successBox.textContent = msg;
+    successBox.style.display = 'block';
+    successBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function download(bytes, name) {
+    const blob = new Blob([bytes], { type: 'application/pdf' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>
