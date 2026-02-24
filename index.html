@@ -3,481 +3,353 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PDF結合ツール</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+    <title>PDFツール集</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
     <style>
-        .pdf-merger-container {
-            max-width: 800px;
+        :root {
+            --dark: #1a1a2e;
+            --darker: #0f0f1a;
+            --accent: #e74c3c;
+            --accent2: #3498db;
+            --text: #ecf0f1;
+            --text-muted: #95a5a6;
+            --card-bg: rgba(255,255,255,0.04);
+            --card-border: rgba(255,255,255,0.08);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            background: var(--darker);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background:
+                radial-gradient(ellipse at 10% 20%, rgba(231,76,60,0.12) 0%, transparent 50%),
+                radial-gradient(ellipse at 90% 80%, rgba(52,152,219,0.1) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .wrapper {
+            position: relative;
+            z-index: 1;
+            max-width: 1100px;
             margin: 0 auto;
-            padding: 20px;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            padding: 60px 20px 80px;
         }
-        
-        .upload-area {
-            border: 3px dashed #ccc;
-            border-radius: 10px;
-            padding: 40px;
+
+        header {
             text-align: center;
-            margin-bottom: 30px;
-            background-color: #f9f9f9;
+            margin-bottom: 70px;
+            animation: fadeDown 0.8s ease both;
+        }
+
+        .header-icon {
+            font-size: 56px;
+            margin-bottom: 20px;
+            display: block;
+            filter: drop-shadow(0 0 20px rgba(231,76,60,0.5));
+        }
+
+        h1 {
+            font-size: clamp(28px, 5vw, 48px);
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            margin-bottom: 15px;
+            background: linear-gradient(135deg, #ecf0f1 30%, #bdc3c7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            color: var(--text-muted);
+            font-size: 15px;
+            font-weight: 300;
+            letter-spacing: 0.1em;
+        }
+
+        .divider {
+            width: 60px;
+            height: 2px;
+            background: linear-gradient(90deg, var(--accent), var(--accent2));
+            margin: 25px auto 0;
+            border-radius: 2px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            padding: 28px;
+            text-decoration: none;
+            color: inherit;
+            display: flex;
+            align-items: flex-start;
+            gap: 20px;
             transition: all 0.3s ease;
-        }
-        
-        .upload-area:hover {
-            border-color: #007bff;
-            background-color: #f0f8ff;
-        }
-        
-        .upload-area.dragover {
-            border-color: #007bff;
-            background-color: #e6f2ff;
-        }
-        
-        .file-input-label {
-            display: inline-block;
-            padding: 12px 30px;
-            background-color: #007bff;
-            color: white;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 16px;
-            transition: background-color 0.3s ease;
-        }
-        
-        .file-input-label:hover {
-            background-color: #0056b3;
-        }
-        
-        input[type="file"] {
-            display: none;
-        }
-        
-        .file-list {
-            margin: 20px 0;
-            display: none;
-        }
-        
-        .file-item {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 12px 15px;
-            margin-bottom: 10px;
-            background-color: #e9ecef;
-            border-radius: 5px;
-            transition: background-color 0.2s;
-        }
-        
-        .file-item:hover {
-            background-color: #dee2e6;
-        }
-        
-        .file-info {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            flex: 1;
-        }
-        
-        .file-name {
-            font-weight: 500;
-            color: #333;
-        }
-        
-        .file-pages {
-            color: #666;
-            font-size: 14px;
-        }
-        
-        .file-actions {
-            display: flex;
-            gap: 10px;
-        }
-        
-        .move-button, .remove-button {
-            padding: 5px 10px;
-            border: none;
-            border-radius: 3px;
-            cursor: pointer;
-            font-size: 14px;
-            transition: background-color 0.2s;
-        }
-        
-        .move-button {
-            background-color: #6c757d;
-            color: white;
-        }
-        
-        .move-button:hover {
-            background-color: #5a6268;
-        }
-        
-        .remove-button {
-            background-color: #dc3545;
-            color: white;
-        }
-        
-        .remove-button:hover {
-            background-color: #c82333;
-        }
-        
-        .merge-button {
-            padding: 15px 40px;
-            background-color: #28a745;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            font-size: 18px;
-            cursor: pointer;
-            transition: background-color 0.3s ease;
-            display: none;
-        }
-        
-        .merge-button:hover {
-            background-color: #218838;
-        }
-        
-        .merge-button:disabled {
-            background-color: #ccc;
-            cursor: not-allowed;
-        }
-        
-        .progress {
-            margin: 20px 0;
-            display: none;
-        }
-        
-        .progress-bar {
-            width: 100%;
-            height: 30px;
-            background-color: #e9ecef;
-            border-radius: 5px;
+            position: relative;
             overflow: hidden;
+            animation: fadeUp 0.6s ease both;
         }
-        
-        .progress-fill {
-            height: 100%;
-            background-color: #007bff;
-            transition: width 0.3s ease;
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--accent-color, var(--accent)), transparent);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .card:hover {
+            background: rgba(255,255,255,0.07);
+            border-color: rgba(255,255,255,0.15);
+            transform: translateY(-4px);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+        }
+
+        .card:hover::before { opacity: 1; }
+
+        .card:nth-child(1) { animation-delay: 0.1s; --accent-color: #e74c3c; }
+        .card:nth-child(2) { animation-delay: 0.15s; --accent-color: #3498db; }
+        .card:nth-child(3) { animation-delay: 0.2s; --accent-color: #2ecc71; }
+        .card:nth-child(4) { animation-delay: 0.25s; --accent-color: #f39c12; }
+        .card:nth-child(5) { animation-delay: 0.3s; --accent-color: #9b59b6; }
+        .card:nth-child(6) { animation-delay: 0.35s; --accent-color: #1abc9c; }
+        .card:nth-child(7) { animation-delay: 0.4s; --accent-color: #e67e22; }
+
+        .card-icon {
+            font-size: 36px;
+            flex-shrink: 0;
+            width: 60px;
+            height: 60px;
             display: flex;
             align-items: center;
             justify-content: center;
-            color: white;
-            font-weight: bold;
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.08);
         }
-        
-        .result {
-            margin-top: 30px;
-            display: none;
+
+        .card-body { flex: 1; }
+
+        .card-title {
+            font-size: 17px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: #fff;
         }
-        
-        .success-message {
-            padding: 15px;
-            background-color: #d4edda;
-            border: 1px solid #c3e6cb;
-            border-radius: 5px;
-            color: #155724;
-            margin-bottom: 20px;
+
+        .card-desc {
+            font-size: 13px;
+            color: var(--text-muted);
+            line-height: 1.7;
+            font-weight: 300;
         }
-        
-        .error-message {
-            padding: 15px;
-            background-color: #f8d7da;
-            border: 1px solid #f5c6cb;
-            border-radius: 5px;
-            color: #721c24;
-            margin-bottom: 20px;
+
+        .card-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 14px;
         }
-        
-        .reset-button {
-            padding: 10px 25px;
-            background-color: #6c757d;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            margin-top: 10px;
+
+        .tag {
+            font-size: 11px;
+            padding: 3px 10px;
+            border-radius: 20px;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: var(--text-muted);
         }
-        
-        .reset-button:hover {
-            background-color: #5a6268;
+
+        .card-arrow {
+            position: absolute;
+            right: 20px;
+            bottom: 20px;
+            font-size: 18px;
+            color: rgba(255,255,255,0.15);
+            transition: all 0.3s ease;
         }
-        
-        .info-box {
-            padding: 15px;
-            background-color: #d1ecf1;
-            border: 1px solid #bee5eb;
-            border-radius: 5px;
-            color: #0c5460;
-            margin-bottom: 20px;
+
+        .card:hover .card-arrow {
+            color: rgba(255,255,255,0.5);
+            transform: translateX(4px);
         }
-        
-        .clear-all-button {
+
+        footer {
+            text-align: center;
+            margin-top: 70px;
+            color: var(--text-muted);
+            font-size: 13px;
+            font-weight: 300;
+            animation: fadeUp 0.6s ease 0.5s both;
+        }
+
+        .security-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(46,204,113,0.1);
+            border: 1px solid rgba(46,204,113,0.2);
+            color: #2ecc71;
             padding: 8px 20px;
-            background-color: #dc3545;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 14px;
-            margin-bottom: 15px;
-            display: none;
+            border-radius: 30px;
+            font-size: 13px;
+            margin-bottom: 20px;
         }
-        
-        .clear-all-button:hover {
-            background-color: #c82333;
+
+        @keyframes fadeDown {
+            from { opacity: 0; transform: translateY(-20px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        @media (max-width: 600px) {
+            .grid { grid-template-columns: 1fr; }
+            header { margin-bottom: 40px; }
         }
     </style>
 </head>
 <body>
-    <div class="pdf-merger-container">
-        <h1 style="text-align: center; color: #333;">PDF結合ツール</h1>
-        <p style="text-align: center; color: #666;">複数のPDFファイルを1つに結合できます。すべての処理はブラウザ内で行われ、ファイルは外部に送信されません。</p>
-        
-        <div class="upload-area" id="uploadArea">
-            <p style="font-size: 18px; color: #666; margin-bottom: 15px;">
-                📄 PDFファイルをドラッグ&ドロップ<br>または
-            </p>
-            <label for="pdfFiles" class="file-input-label">
-                ファイルを選択（複数可）
-            </label>
-            <input type="file" id="pdfFiles" accept=".pdf" multiple>
-            <p style="font-size: 14px; color: #999; margin-top: 15px;">
-                ※ 複数のファイルを一度に選択できます
-            </p>
-        </div>
-        
-        <div class="file-list" id="fileList">
-            <div class="info-box">
-                📌 ファイルの順序を変更するには「↑」「↓」ボタンを使用してください。上から順に結合されます。
+<div class="wrapper">
+
+    <header>
+        <span class="header-icon">📂</span>
+        <h1>PDF ツール集</h1>
+        <p class="subtitle">ブラウザだけで使える・無料・安全</p>
+        <div class="divider"></div>
+    </header>
+
+    <div class="grid">
+
+        <a class="card" href="分割ツール/">
+            <div class="card-icon">✂️</div>
+            <div class="card-body">
+                <div class="card-title">PDF 分割</div>
+                <div class="card-desc">PDFを1ページずつ、または指定した範囲で分割します。</div>
+                <div class="card-tags">
+                    <span class="tag">全ページ分割</span>
+                    <span class="tag">範囲指定</span>
+                    <span class="tag">Nページごと</span>
+                </div>
             </div>
-            <button class="clear-all-button" id="clearAllButton">すべてクリア</button>
-            <div id="filesContainer"></div>
-        </div>
-        
-        <div style="text-align: center; margin-top: 30px;">
-            <button class="merge-button" id="mergeButton">結合を実行</button>
-        </div>
-        
-        <div class="progress" id="progress">
-            <div class="progress-bar">
-                <div class="progress-fill" id="progressFill" style="width: 0%;">0%</div>
+            <span class="card-arrow">→</span>
+        </a>
+
+        <a class="card" href="結合ツール/">
+            <div class="card-icon">🔗</div>
+            <div class="card-body">
+                <div class="card-title">PDF 結合</div>
+                <div class="card-desc">複数のPDFを1つにまとめます。順番の入れ替えも可能。</div>
+                <div class="card-tags">
+                    <span class="tag">複数ファイル</span>
+                    <span class="tag">順番変更</span>
+                    <span class="tag">一括処理</span>
+                </div>
             </div>
-        </div>
-        
-        <div class="result" id="result"></div>
+            <span class="card-arrow">→</span>
+        </a>
+
+        <a class="card" href="編集ツール/">
+            <div class="card-icon">✏️</div>
+            <div class="card-body">
+                <div class="card-title">PDF 編集（注釈）</div>
+                <div class="card-desc">テキスト追加・図形描画・ハイライト・スタンプなど。</div>
+                <div class="card-tags">
+                    <span class="tag">テキスト</span>
+                    <span class="tag">図形</span>
+                    <span class="tag">スタンプ</span>
+                </div>
+            </div>
+            <span class="card-arrow">→</span>
+        </a>
+
+        <a class="card" href="JPEG変換/">
+            <div class="card-icon">🖼️</div>
+            <div class="card-body">
+                <div class="card-title">PDF → JPEG 変換</div>
+                <div class="card-desc">PDFの各ページを高品質なJPEG画像に変換します。</div>
+                <div class="card-tags">
+                    <span class="tag">画質調整</span>
+                    <span class="tag">解像度選択</span>
+                    <span class="tag">ZIP一括DL</span>
+                </div>
+            </div>
+            <span class="card-arrow">→</span>
+        </a>
+
+        <a class="card" href="多機能ツール/">
+            <div class="card-icon">🛠️</div>
+            <div class="card-body">
+                <div class="card-title">PDF 多機能編集</div>
+                <div class="card-desc">ページ削除・回転・OCRテキスト抽出をまとめて。</div>
+                <div class="card-tags">
+                    <span class="tag">ページ削除</span>
+                    <span class="tag">回転</span>
+                    <span class="tag">OCR</span>
+                </div>
+            </div>
+            <span class="card-arrow">→</span>
+        </a>
+
+        <a class="card" href="リネームツール/">
+            <div class="card-icon">🏷️</div>
+            <div class="card-body">
+                <div class="card-title">PDF 一括リネーム</div>
+                <div class="card-desc">複数のPDFを連番やカスタムパターンで一括リネーム。</div>
+                <div class="card-tags">
+                    <span class="tag">連番</span>
+                    <span class="tag">プレフィックス</span>
+                    <span class="tag">ZIP保存</span>
+                </div>
+            </div>
+            <span class="card-arrow">→</span>
+        </a>
+
+        <a class="card" href="向き修正ツール/">
+            <div class="card-icon">🔄</div>
+            <div class="card-body">
+                <div class="card-title">PDF 向き修正</div>
+                <div class="card-desc">スキャンPDFの縦横を自動検出・手動で修正します。</div>
+                <div class="card-tags">
+                    <span class="tag">自動検出</span>
+                    <span class="tag">手動回転</span>
+                    <span class="tag">複数ページ</span>
+                </div>
+            </div>
+            <span class="card-arrow">→</span>
+        </a>
+
     </div>
 
-    <script>
-        const { PDFDocument } = PDFLib;
-        
-        let pdfFiles = [];
-        
-        const uploadArea = document.getElementById('uploadArea');
-        const pdfFilesInput = document.getElementById('pdfFiles');
-        const fileList = document.getElementById('fileList');
-        const filesContainer = document.getElementById('filesContainer');
-        const mergeButton = document.getElementById('mergeButton');
-        const clearAllButton = document.getElementById('clearAllButton');
-        const progress = document.getElementById('progress');
-        const progressFill = document.getElementById('progressFill');
-        const result = document.getElementById('result');
-        
-        // ドラッグ&ドロップ
-        uploadArea.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            uploadArea.classList.add('dragover');
-        });
-        
-        uploadArea.addEventListener('dragleave', () => {
-            uploadArea.classList.remove('dragover');
-        });
-        
-        uploadArea.addEventListener('drop', (e) => {
-            e.preventDefault();
-            uploadArea.classList.remove('dragover');
-            const files = Array.from(e.dataTransfer.files).filter(f => f.type === 'application/pdf');
-            if (files.length > 0) {
-                handleFiles(files);
-            }
-        });
-        
-        pdfFilesInput.addEventListener('change', (e) => {
-            const files = Array.from(e.target.files);
-            if (files.length > 0) {
-                handleFiles(files);
-            }
-        });
-        
-        async function handleFiles(files) {
-            for (const file of files) {
-                try {
-                    const arrayBuffer = await file.arrayBuffer();
-                    const pdfDoc = await PDFDocument.load(arrayBuffer);
-                    const numPages = pdfDoc.getPageCount();
-                    
-                    pdfFiles.push({
-                        name: file.name,
-                        data: arrayBuffer,
-                        pages: numPages
-                    });
-                } catch (error) {
-                    showError(`${file.name} の読み込みに失敗しました: ${error.message}`);
-                }
-            }
-            
-            updateFileList();
-            pdfFilesInput.value = '';
-        }
-        
-        function updateFileList() {
-            if (pdfFiles.length === 0) {
-                fileList.style.display = 'none';
-                mergeButton.style.display = 'none';
-                clearAllButton.style.display = 'none';
-                return;
-            }
-            
-            fileList.style.display = 'block';
-            mergeButton.style.display = 'inline-block';
-            clearAllButton.style.display = 'inline-block';
-            
-            filesContainer.innerHTML = '';
-            
-            pdfFiles.forEach((file, index) => {
-                const fileItem = document.createElement('div');
-                fileItem.className = 'file-item';
-                fileItem.innerHTML = `
-                    <div class="file-info">
-                        <span style="font-weight: bold; color: #007bff;">${index + 1}.</span>
-                        <span class="file-name">${file.name}</span>
-                        <span class="file-pages">(${file.pages}ページ)</span>
-                    </div>
-                    <div class="file-actions">
-                        ${index > 0 ? '<button class="move-button" onclick="moveUp(' + index + ')">↑</button>' : '<button class="move-button" disabled style="opacity: 0.3;">↑</button>'}
-                        ${index < pdfFiles.length - 1 ? '<button class="move-button" onclick="moveDown(' + index + ')">↓</button>' : '<button class="move-button" disabled style="opacity: 0.3;">↓</button>'}
-                        <button class="remove-button" onclick="removeFile(${index})">削除</button>
-                    </div>
-                `;
-                filesContainer.appendChild(fileItem);
-            });
-        }
-        
-        window.moveUp = function(index) {
-            if (index > 0) {
-                [pdfFiles[index], pdfFiles[index - 1]] = [pdfFiles[index - 1], pdfFiles[index]];
-                updateFileList();
-            }
-        }
-        
-        window.moveDown = function(index) {
-            if (index < pdfFiles.length - 1) {
-                [pdfFiles[index], pdfFiles[index + 1]] = [pdfFiles[index + 1], pdfFiles[index]];
-                updateFileList();
-            }
-        }
-        
-        window.removeFile = function(index) {
-            pdfFiles.splice(index, 1);
-            updateFileList();
-        }
-        
-        clearAllButton.addEventListener('click', () => {
-            if (confirm('すべてのファイルをクリアしますか?')) {
-                pdfFiles = [];
-                updateFileList();
-            }
-        });
-        
-        mergeButton.addEventListener('click', async () => {
-            if (pdfFiles.length < 2) {
-                showError('少なくとも2つのPDFファイルを追加してください');
-                return;
-            }
-            
-            mergeButton.disabled = true;
-            progress.style.display = 'block';
-            result.style.display = 'none';
-            
-            try {
-                await mergePDFs();
-                showSuccess('結合が完了しました！');
-            } catch (error) {
-                showError('結合中にエラーが発生しました: ' + error.message);
-            }
-            
-            mergeButton.disabled = false;
-        });
-        
-        async function mergePDFs() {
-            const mergedPdf = await PDFDocument.create();
-            
-            for (let i = 0; i < pdfFiles.length; i++) {
-                updateProgress((i / pdfFiles.length) * 100);
-                
-                const pdfDoc = await PDFDocument.load(pdfFiles[i].data);
-                const pageCount = pdfDoc.getPageCount();
-                const pageIndices = Array.from({length: pageCount}, (_, idx) => idx);
-                
-                const copiedPages = await mergedPdf.copyPages(pdfDoc, pageIndices);
-                copiedPages.forEach(page => mergedPdf.addPage(page));
-            }
-            
-            updateProgress(100);
-            
-            const mergedPdfBytes = await mergedPdf.save();
-            downloadPDF(mergedPdfBytes, 'merged.pdf');
-        }
-        
-        function downloadPDF(pdfBytes, filename) {
-            const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-        }
-        
-        function updateProgress(percent) {
-            const rounded = Math.round(percent);
-            progressFill.style.width = `${rounded}%`;
-            progressFill.textContent = `${rounded}%`;
-        }
-        
-        function showSuccess(message) {
-            result.innerHTML = `
-                <div class="success-message">
-                    ✅ ${message}
-                </div>
-                <button class="reset-button" onclick="resetForm()">別のファイルを結合</button>
-            `;
-            result.style.display = 'block';
-            progress.style.display = 'none';
-        }
-        
-        function showError(message) {
-            result.innerHTML = `
-                <div class="error-message">
-                    ❌ ${message}
-                </div>
-            `;
-            result.style.display = 'block';
-            setTimeout(() => {
-                result.style.display = 'none';
-            }, 5000);
-        }
-        
-        window.resetForm = function() {
-            pdfFiles = [];
-            updateFileList();
-            result.style.display = 'none';
-            progress.style.display = 'none';
-            progressFill.style.width = '0%';
-            progressFill.textContent = '0%';
-        }
-    </script>
+    <footer>
+        <div class="security-badge">
+            🔒 すべての処理はブラウザ内で完結・ファイルは外部に送信されません
+        </div>
+        <p>© 2025 PDF Tools — 完全無料・登録不要</p>
+    </footer>
+
+</div>
 </body>
 </html>
