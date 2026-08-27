@@ -1,0 +1,1077 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDFブックビューア</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+    font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', 'Yu Gothic', Roboto, sans-serif;
+    background:#2b2b33;
+    color:#eee;
+    height:100vh;
+    overflow:hidden;
+    display:flex;
+    flex-direction:column;
+}
+
+/* ============ アップロード ============ */
+#uploadScreen {
+    flex:1; display:flex; align-items:center; justify-content:center;
+    background:#f5f5f5;
+}
+.upload-area {
+    border:3px dashed #ccc; border-radius:14px;
+    padding:60px 80px; text-align:center; background:#fff; transition:all .3s;
+}
+.upload-area:hover, .upload-area.dragover { border-color:#007bff; background:#f0f8ff; }
+.upload-area h1 { color:#333; font-size:26px; margin-bottom:6px; }
+.upload-area .sub { color:#777; font-size:14px; margin-bottom:24px; }
+.upload-area .hint { color:#aaa; font-size:13px; margin-top:16px; }
+.upload-btn {
+    display:inline-block; padding:12px 32px; background:#007bff; color:#fff;
+    border-radius:6px; cursor:pointer; font-size:16px;
+}
+.upload-btn:hover { background:#0056b3; }
+input[type="file"] { display:none; }
+
+/* ============ ツールバー ============ */
+#viewer { flex:1; display:none; flex-direction:column; min-height:0; }
+
+.bar {
+    background:#1f1f26; border-bottom:1px solid #3a3a45;
+    padding:8px 14px; display:flex; align-items:center; gap:8px;
+    flex-wrap:wrap; flex-shrink:0;
+}
+.bar .sep { width:1px; height:24px; background:#3a3a45; margin:0 4px; }
+.bar .label { font-size:12px; color:#999; }
+.spacer { margin-left:auto; }
+
+.tbtn {
+    padding:7px 13px; background:#2f2f3a; color:#ddd;
+    border:1px solid #45454f; border-radius:5px; cursor:pointer;
+    font-size:13px; transition:all .15s; white-space:nowrap;
+}
+.tbtn:hover { background:#3c3c4a; color:#fff; }
+.tbtn.active { background:#007bff; border-color:#007bff; color:#fff; }
+.tbtn:disabled { opacity:.35; cursor:not-allowed; }
+.tbtn.save { background:#28a745; border-color:#28a745; color:#fff; }
+.tbtn.save:hover { background:#218838; }
+.tbtn.print { background:#6f42c1; border-color:#6f42c1; color:#fff; }
+.tbtn.print:hover { background:#5a32a3; }
+.tbtn.danger { border-color:#a33; color:#e88; }
+.tbtn.danger:hover { background:#a33; color:#fff; }
+.tbtn.eraser.active { background:#dc3545; border-color:#dc3545; }
+
+#zoomLevel { font-size:13px; color:#bbb; min-width:48px; text-align:center; }
+
+input[type="color"] {
+    width:34px; height:30px; border:1px solid #45454f;
+    border-radius:5px; background:#2f2f3a; cursor:pointer; padding:2px;
+}
+select.tsel {
+    padding:6px 8px; background:#2f2f3a; color:#ddd;
+    border:1px solid #45454f; border-radius:5px; font-size:13px;
+}
+
+/* ============ ブック ============ */
+#stage {
+    flex:1; overflow:auto; display:flex; align-items:center; justify-content:center;
+    padding:24px; background:#2b2b33; min-height:0;
+}
+#book { display:flex; perspective:2400px; position:relative;
+    filter:drop-shadow(0 14px 40px rgba(0,0,0,.55)); }
+
+.leaf { position:relative; background:#fff; line-height:0; }
+.leaf.empty { background:transparent; }
+.leaf canvas { display:block; }
+.leaf .anno { position:absolute; top:0; left:0; cursor:default; }
+
+#book.spread .leaf.left  { box-shadow:inset -14px 0 22px -14px rgba(0,0,0,.45); }
+#book.spread .leaf.right { box-shadow:inset  14px 0 22px -14px rgba(0,0,0,.45); }
+
+/* インライン編集用テキストエリア */
+.inline-editor {
+    position:absolute;
+    z-index:30;
+    border:2px dashed #007bff;
+    background:rgba(255,255,255,.94);
+    padding:4px 6px;
+    font-family:'Hiragino Sans','Yu Gothic',sans-serif;
+    line-height:1.35;
+    resize:none;
+    outline:none;
+    overflow:hidden;
+    border-radius:2px;
+}
+
+/* めくりアニメ */
+#flipper {
+    position:absolute; top:0; transform-style:preserve-3d;
+    transition:transform .62s cubic-bezier(.4,.1,.3,1);
+    pointer-events:none; z-index:20; display:none;
+}
+#flipper .face { position:absolute; top:0; left:0; backface-visibility:hidden; background:#fff; line-height:0; }
+#flipper .face img { display:block; width:100%; height:100%; }
+#flipper .back { transform:rotateY(180deg); }
+
+/* ============ フッター ============ */
+.footer {
+    background:#1f1f26; border-top:1px solid #3a3a45;
+    padding:9px 14px; display:flex; align-items:center; gap:14px;
+    justify-content:center; flex-shrink:0;
+}
+#pageSlider { flex:1; max-width:420px; accent-color:#007bff; }
+#pageInfo { font-size:13px; color:#bbb; min-width:110px; text-align:center; }
+
+/* ============ ヒント ============ */
+#hint {
+    position:fixed; bottom:70px; left:50%; transform:translateX(-50%);
+    background:rgba(0,0,0,.8); color:#fff; padding:9px 18px;
+    border-radius:20px; font-size:13px; z-index:60;
+    pointer-events:none; opacity:0; transition:opacity .3s;
+}
+#hint.show { opacity:1; }
+
+/* ============ 印刷 ============ */
+#printArea { display:none; }
+
+@media print {
+    body { background:#fff; height:auto; overflow:visible; display:block; }
+    #uploadScreen, #viewer, #hint, #loading { display:none !important; }
+    #printArea { display:block !important; }
+    .print-page {
+        page-break-after:always;
+        width:100%;
+        display:flex; align-items:center; justify-content:center;
+    }
+    .print-page:last-child { page-break-after:auto; }
+    .print-page img { max-width:100%; max-height:100vh; }
+    @page { margin:8mm; }
+}
+
+:fullscreen #stage { padding:10px; }
+
+/* ローディング */
+#loading {
+    position:fixed; inset:0; background:rgba(0,0,0,.7);
+    display:none; align-items:center; justify-content:center;
+    z-index:200; color:#fff; font-size:16px;
+}
+#loading .box { background:#2f2f3a; padding:24px 40px; border-radius:10px; text-align:center; }
+</style>
+</head>
+<body>
+
+<!-- ========== アップロード ========== -->
+<div id="uploadScreen">
+    <div class="upload-area" id="uploadArea">
+        <p style="font-size:44px; margin-bottom:12px;">📖</p>
+        <h1>PDFブックビューア</h1>
+        <p class="sub">本を読むようにPDFを閲覧・書き込み・印刷できます</p>
+        <label for="pdfFile" class="upload-btn">ファイルを選択</label>
+        <input type="file" id="pdfFile" accept=".pdf">
+        <p class="hint">ドラッグ&amp;ドロップでも開けます</p>
+    </div>
+</div>
+
+<!-- ========== ビューア ========== -->
+<div id="viewer">
+
+    <!-- 表示ツールバー -->
+    <div class="bar">
+        <span class="label">表示</span>
+        <button class="tbtn active" id="modeSpread">📖 見開き</button>
+        <button class="tbtn" id="modeSingle">📄 単ページ</button>
+
+        <div class="sep"></div>
+
+        <span class="label">ズーム</span>
+        <button class="tbtn" id="zoomOut">−</button>
+        <span id="zoomLevel">100%</span>
+        <button class="tbtn" id="zoomIn">＋</button>
+        <button class="tbtn" id="zoomFit">画面に合わせる</button>
+
+        <div class="sep"></div>
+
+        <button class="tbtn" id="fullscreenBtn">⛶ 全画面</button>
+
+        <div class="spacer"></div>
+
+        <button class="tbtn print" id="printBtn">🖨️ 印刷</button>
+        <button class="tbtn save" id="saveBtn">💾 PDFで保存</button>
+        <button class="tbtn" id="newFileBtn">🔄 別のファイル</button>
+    </div>
+
+    <!-- 注釈ツールバー -->
+    <div class="bar">
+        <span class="label">ツール</span>
+        <button class="tbtn active" id="toolNone">✋ 閲覧</button>
+        <button class="tbtn" id="toolText">📝 テキスト</button>
+        <button class="tbtn" id="toolHighlight">🖍️ ハイライト</button>
+        <button class="tbtn" id="toolArrow">➡️ 矢印</button>
+        <button class="tbtn" id="toolBox">⬜ 囲い込み</button>
+        <button class="tbtn eraser" id="toolErase">🗑️ 削除</button>
+
+        <div class="sep"></div>
+
+        <span class="label">文字サイズ</span>
+        <select class="tsel" id="fontSizePicker">
+            <option value="9">9 pt</option>
+            <option value="11">11 pt</option>
+            <option value="14" selected>14 pt</option>
+            <option value="18">18 pt</option>
+            <option value="24">24 pt</option>
+            <option value="32">32 pt</option>
+            <option value="48">48 pt</option>
+        </select>
+
+        <span class="label">枠線</span>
+        <select class="tsel" id="textBorderPicker">
+            <option value="none" selected>なし</option>
+            <option value="line">枠線あり</option>
+            <option value="fill">白背景＋枠線</option>
+        </select>
+
+        <div class="sep"></div>
+
+        <span class="label">色</span>
+        <input type="color" id="colorPicker" value="#e03131">
+
+        <span class="label">線の太さ</span>
+        <select class="tsel" id="sizePicker">
+            <option value="1">細い</option>
+            <option value="2" selected>普通</option>
+            <option value="4">太い</option>
+            <option value="6">極太</option>
+        </select>
+
+        <div class="sep"></div>
+
+        <button class="tbtn" id="undoBtn">↶ 元に戻す</button>
+        <button class="tbtn danger" id="clearPageBtn">🗑️ このページを消去</button>
+    </div>
+
+    <!-- ブック -->
+    <div id="stage">
+        <div id="book" class="spread">
+            <div class="leaf left"  id="leafLeft"></div>
+            <div class="leaf right" id="leafRight"></div>
+            <div id="flipper">
+                <div class="face front"><img id="flipFront"></div>
+                <div class="face back"><img id="flipBack"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- フッター -->
+    <div class="footer">
+        <button class="tbtn" id="prevBtn">◀ 前へ</button>
+        <input type="range" id="pageSlider" min="1" value="1">
+        <span id="pageInfo">1 / 1</span>
+        <button class="tbtn" id="nextBtn">次へ ▶</button>
+    </div>
+</div>
+
+<div id="hint"></div>
+<div id="printArea"></div>
+<div id="loading"><div class="box" id="loadingMsg">処理中...</div></div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+
+/* ================= 状態 ================= */
+let pdfDoc = null, pdfBytes = null, totalPages = 0;
+let currentPage = 1, spreadMode = true, zoom = 1, baseScale = 1.4;
+let animating = false;
+
+let tool = 'none';
+let color = '#e03131';
+let sizeLevel = 2;
+let fontPt = 14;
+let textBorder = 'none';
+
+let annotations = {};      // page -> [ann]
+let pageSizes = {};        // page -> {w,h} in points
+
+let drawing = false, drawStart = null, drawCanvas = null;
+let activeEditor = null;
+
+/* ================= 要素 ================= */
+const uploadScreen = document.getElementById('uploadScreen');
+const uploadArea   = document.getElementById('uploadArea');
+const fileInput    = document.getElementById('pdfFile');
+const viewer       = document.getElementById('viewer');
+const book         = document.getElementById('book');
+const leafLeft     = document.getElementById('leafLeft');
+const leafRight    = document.getElementById('leafRight');
+const flipper      = document.getElementById('flipper');
+const flipFront    = document.getElementById('flipFront');
+const flipBack     = document.getElementById('flipBack');
+const pageInfo     = document.getElementById('pageInfo');
+const pageSlider   = document.getElementById('pageSlider');
+const zoomLevel    = document.getElementById('zoomLevel');
+const hintEl       = document.getElementById('hint');
+const loadingEl    = document.getElementById('loading');
+const loadingMsg   = document.getElementById('loadingMsg');
+
+/* ================= 読み込み ================= */
+uploadArea.addEventListener('dragover', e => { e.preventDefault(); uploadArea.classList.add('dragover'); });
+uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+uploadArea.addEventListener('drop', e => {
+    e.preventDefault(); uploadArea.classList.remove('dragover');
+    const f = e.dataTransfer.files[0];
+    if (f && f.type === 'application/pdf') loadPDF(f);
+});
+fileInput.addEventListener('change', e => { if (e.target.files[0]) loadPDF(e.target.files[0]); });
+
+async function loadPDF(file) {
+    try {
+        const buf = await file.arrayBuffer();
+        pdfBytes = buf.slice(0);
+        pdfDoc = await pdfjsLib.getDocument({ data: buf }).promise;
+        totalPages = pdfDoc.numPages;
+        currentPage = 1;
+        annotations = {};
+        pageSizes = {};
+
+        for (let i = 1; i <= totalPages; i++) {
+            const p = await pdfDoc.getPage(i);
+            const vp = p.getViewport({ scale: 1 });
+            pageSizes[i] = { w: vp.width, h: vp.height };
+        }
+
+        uploadScreen.style.display = 'none';
+        viewer.style.display = 'flex';
+        pageSlider.max = totalPages;
+
+        await fitToScreen();
+        showHint('← → キーでページ送りできます');
+    } catch (e) {
+        alert('読み込みエラー: ' + e.message);
+    }
+}
+
+/* ================= 描画 ================= */
+async function renderLeaf(leafEl, pageNum) {
+    leafEl.innerHTML = '';
+    if (pageNum < 1 || pageNum > totalPages) { leafEl.classList.add('empty'); return; }
+    leafEl.classList.remove('empty');
+
+    const page = await pdfDoc.getPage(pageNum);
+    const vp = page.getViewport({ scale: baseScale * zoom });
+
+    const canvas = document.createElement('canvas');
+    canvas.width = vp.width; canvas.height = vp.height;
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+    leafEl.appendChild(canvas);
+
+    const anno = document.createElement('canvas');
+    anno.className = 'anno';
+    anno.width = vp.width; anno.height = vp.height;
+    anno.dataset.page = pageNum;
+    leafEl.appendChild(anno);
+
+    attachEvents(anno, pageNum, leafEl);
+    redrawAnnotations(anno, pageNum);
+    applyCursor(anno);
+}
+
+async function renderView() {
+    commitEditor();
+    if (spreadMode) {
+        book.classList.add('spread');
+        leafRight.style.display = '';
+        if (currentPage === 1) {
+            await renderLeaf(leafLeft, -1);
+            await renderLeaf(leafRight, 1);
+        } else {
+            await renderLeaf(leafLeft, currentPage);
+            await renderLeaf(leafRight, currentPage + 1);
+        }
+    } else {
+        book.classList.remove('spread');
+        leafRight.style.display = 'none';
+        await renderLeaf(leafLeft, currentPage);
+    }
+    updateIndicators();
+}
+
+function updateIndicators() {
+    if (spreadMode && currentPage > 1) {
+        const right = Math.min(currentPage + 1, totalPages);
+        pageInfo.textContent = right > currentPage
+            ? `${currentPage}–${right} / ${totalPages}` : `${currentPage} / ${totalPages}`;
+    } else {
+        pageInfo.textContent = `${currentPage} / ${totalPages}`;
+    }
+    pageSlider.value = currentPage;
+    document.getElementById('prevBtn').disabled = currentPage <= 1;
+    document.getElementById('nextBtn').disabled = currentPage >= totalPages;
+    zoomLevel.textContent = Math.round(zoom * 100) + '%';
+}
+
+function applyCursor(anno) {
+    if (tool === 'none') anno.style.cursor = 'default';
+    else if (tool === 'erase') anno.style.cursor = 'pointer';
+    else if (tool === 'text') anno.style.cursor = 'text';
+    else anno.style.cursor = 'crosshair';
+}
+
+/* ================= ページ送り ================= */
+function step() { return !spreadMode ? 1 : (currentPage === 1 ? 1 : 2); }
+
+async function goNext() {
+    if (animating || currentPage >= totalPages) return;
+    await flipTo(Math.min(currentPage + step(), totalPages), 'next');
+}
+async function goPrev() {
+    if (animating || currentPage <= 1) return;
+    const target = !spreadMode ? currentPage - 1 : (currentPage - 2 <= 1 ? 1 : currentPage - 2);
+    await flipTo(target, 'prev');
+}
+
+async function flipTo(target, dir) {
+    if (target === currentPage) return;
+    commitEditor();
+    animating = true;
+
+    const movingLeaf = (spreadMode && dir === 'next') ? leafRight : leafLeft;
+    const snapFront = snapshot(movingLeaf);
+    if (!snapFront) {
+        currentPage = target; await renderView(); animating = false; return;
+    }
+
+    currentPage = target;
+    await renderView();
+    const landingLeaf = (spreadMode && dir === 'next') ? leafLeft : leafRight;
+    const snapBack = snapshot(landingLeaf) || snapFront;
+
+    const w = snapFront.width, h = snapFront.height;
+    flipper.style.display = 'block';
+    flipper.style.width = w + 'px'; flipper.style.height = h + 'px';
+    flipper.style.transition = 'none';
+    flipFront.src = snapFront.url; flipBack.src = snapBack.url;
+    [flipFront, flipBack].forEach(img => {
+        img.parentElement.style.width = w + 'px';
+        img.parentElement.style.height = h + 'px';
+    });
+
+    if (dir === 'next') {
+        flipper.style.left = (spreadMode ? w : 0) + 'px';
+        flipper.style.transformOrigin = 'left center';
+    } else {
+        flipper.style.left = '0px';
+        flipper.style.transformOrigin = 'right center';
+    }
+    flipper.style.transform = 'rotateY(0deg)';
+
+    requestAnimationFrame(() => {
+        flipper.style.transition = 'transform .62s cubic-bezier(.4,.1,.3,1)';
+        flipper.style.transform = dir === 'next' ? 'rotateY(-176deg)' : 'rotateY(176deg)';
+    });
+
+    setTimeout(() => {
+        flipper.style.display = 'none';
+        flipper.style.transition = 'none';
+        flipper.style.transform = 'rotateY(0deg)';
+        animating = false;
+    }, 640);
+}
+
+function snapshot(leafEl) {
+    const cvs = leafEl.querySelectorAll('canvas');
+    if (!cvs.length) return null;
+    const base = cvs[0];
+    const tmp = document.createElement('canvas');
+    tmp.width = base.width; tmp.height = base.height;
+    const c = tmp.getContext('2d');
+    cvs.forEach(cv => c.drawImage(cv, 0, 0));
+    return { url: tmp.toDataURL('image/jpeg', .85), width: base.width, height: base.height };
+}
+
+/* ================= イベント ================= */
+function attachEvents(canvas, pageNum, leafEl) {
+    canvas.addEventListener('mousedown', e => {
+        if (tool === 'none') return;
+        commitEditor();
+
+        const p = normPoint(e, canvas);
+
+        if (tool === 'erase') {
+            const idx = hitTest(pageNum, p);
+            if (idx >= 0) {
+                annotations[pageNum].splice(idx, 1);
+                redrawAnnotations(canvas, pageNum);
+                showHint('削除しました');
+            } else {
+                showHint('消したい書き込みをクリックしてください');
+            }
+            return;
+        }
+
+        drawing = true;
+        drawStart = p;
+        drawCanvas = canvas;
+    });
+
+    canvas.addEventListener('mousemove', e => {
+        if (!drawing || drawCanvas !== canvas) return;
+        const p = normPoint(e, canvas);
+        redrawAnnotations(canvas, pageNum);
+        drawShape(canvas.getContext('2d'), canvas, pageNum, {
+            type: tool === 'text' ? 'textbox-preview' : tool,
+            x1: drawStart.x, y1: drawStart.y, x2: p.x, y2: p.y,
+            color, size: sizeLevel
+        });
+    });
+
+    canvas.addEventListener('mouseup', e => {
+        if (!drawing || drawCanvas !== canvas) return;
+        drawing = false;
+        const p = normPoint(e, canvas);
+        const dx = Math.abs(p.x - drawStart.x), dy = Math.abs(p.y - drawStart.y);
+
+        if (tool === 'text') {
+            let x1 = Math.min(drawStart.x, p.x), y1 = Math.min(drawStart.y, p.y);
+            let x2 = Math.max(drawStart.x, p.x), y2 = Math.max(drawStart.y, p.y);
+            // 小さすぎる場合は既定サイズの枠にする
+            if (dx < 0.03 || dy < 0.02) {
+                x1 = drawStart.x; y1 = drawStart.y;
+                x2 = Math.min(1, x1 + 0.32);
+                y2 = Math.min(1, y1 + 0.10);
+            }
+            redrawAnnotations(canvas, pageNum);
+            openEditor(leafEl, canvas, pageNum, { x1, y1, x2, y2 }, null);
+            return;
+        }
+
+        if (dx < 0.004 && dy < 0.004) { redrawAnnotations(canvas, pageNum); return; }
+
+        addAnnotation(pageNum, {
+            type: tool, x1: drawStart.x, y1: drawStart.y, x2: p.x, y2: p.y,
+            color, size: sizeLevel
+        });
+        redrawAnnotations(canvas, pageNum);
+    });
+
+    canvas.addEventListener('mouseleave', () => {
+        if (drawing && drawCanvas === canvas) { drawing = false; redrawAnnotations(canvas, pageNum); }
+    });
+
+    // テキストをダブルクリックで再編集
+    canvas.addEventListener('dblclick', e => {
+        const p = normPoint(e, canvas);
+        const idx = hitTest(pageNum, p, 'text');
+        if (idx >= 0) {
+            const ann = annotations[pageNum][idx];
+            annotations[pageNum].splice(idx, 1);
+            redrawAnnotations(canvas, pageNum);
+            openEditor(leafEl, canvas, pageNum,
+                { x1:ann.x1, y1:ann.y1, x2:ann.x2, y2:ann.y2 }, ann);
+        }
+    });
+}
+
+function normPoint(e, canvas) {
+    const r = canvas.getBoundingClientRect();
+    return {
+        x: Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)),
+        y: Math.max(0, Math.min(1, (e.clientY - r.top) / r.height))
+    };
+}
+
+/* ================= テキスト入力（枠内） ================= */
+function openEditor(leafEl, canvas, pageNum, box, existing) {
+    commitEditor();
+
+    const rect = canvas.getBoundingClientRect();
+    const W = rect.width, H = rect.height;
+
+    const left = box.x1 * W;
+    const top  = box.y1 * H;
+    const w    = (box.x2 - box.x1) * W;
+    const h    = (box.y2 - box.y1) * H;
+
+    const ptToDisplayPx = W / pageSizes[pageNum].w;
+    const usedPt     = existing ? existing.fontPt : fontPt;
+    const usedColor  = existing ? existing.color  : color;
+    const usedBorder = existing ? existing.border : textBorder;
+
+    const ta = document.createElement('textarea');
+    ta.className = 'inline-editor';
+    ta.style.left   = left + 'px';
+    ta.style.top    = top + 'px';
+    ta.style.width  = w + 'px';
+    ta.style.height = h + 'px';
+    ta.style.fontSize = (usedPt * ptToDisplayPx) + 'px';
+    ta.style.color = usedColor;
+    ta.value = existing ? existing.text : '';
+    ta.placeholder = '文字を入力…';
+
+    leafEl.appendChild(ta);
+    setTimeout(() => ta.focus(), 30);
+
+    activeEditor = { el: ta, pageNum, box, fontPt: usedPt, color: usedColor, border: usedBorder };
+
+    ta.addEventListener('keydown', ev => {
+        ev.stopPropagation();
+        if (ev.key === 'Escape') { ev.preventDefault(); commitEditor(); }
+    });
+    ta.addEventListener('blur', () => setTimeout(commitEditor, 80));
+}
+
+function commitEditor() {
+    if (!activeEditor) return;
+    const ed = activeEditor;
+    activeEditor = null;
+
+    const text = ed.el.value.trim();
+    if (ed.el.parentElement) ed.el.parentElement.removeChild(ed.el);
+
+    if (text) {
+        addAnnotation(ed.pageNum, {
+            type: 'text',
+            x1: ed.box.x1, y1: ed.box.y1, x2: ed.box.x2, y2: ed.box.y2,
+            text, color: ed.color, fontPt: ed.fontPt, border: ed.border
+        });
+    }
+    const cv = document.querySelector(`.anno[data-page="${ed.pageNum}"]`);
+    if (cv) redrawAnnotations(cv, ed.pageNum);
+}
+
+/* ================= 注釈データ ================= */
+function addAnnotation(pageNum, ann) {
+    if (!annotations[pageNum]) annotations[pageNum] = [];
+    annotations[pageNum].push(ann);
+}
+
+function hitTest(pageNum, p, onlyType) {
+    const list = annotations[pageNum] || [];
+    for (let i = list.length - 1; i >= 0; i--) {
+        const a = list[i];
+        if (onlyType && a.type !== onlyType) continue;
+        if (a.type === 'arrow') {
+            if (distToSegment(p, {x:a.x1,y:a.y1}, {x:a.x2,y:a.y2}) < 0.012) return i;
+        } else {
+            const x1 = Math.min(a.x1, a.x2), x2 = Math.max(a.x1, a.x2);
+            const y1 = Math.min(a.y1, a.y2), y2 = Math.max(a.y1, a.y2);
+            if (p.x >= x1 - 0.005 && p.x <= x2 + 0.005 &&
+                p.y >= y1 - 0.005 && p.y <= y2 + 0.005) return i;
+        }
+    }
+    return -1;
+}
+
+function distToSegment(p, a, b) {
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const len2 = dx*dx + dy*dy;
+    if (len2 === 0) return Math.hypot(p.x - a.x, p.y - a.y);
+    let t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2;
+    t = Math.max(0, Math.min(1, t));
+    return Math.hypot(p.x - (a.x + t*dx), p.y - (a.y + t*dy));
+}
+
+/* ================= 注釈の描画 ================= */
+function redrawAnnotations(canvas, pageNum) {
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    (annotations[pageNum] || []).forEach(a => drawShape(ctx, canvas, pageNum, a));
+}
+
+function drawShape(ctx, canvas, pageNum, a) {
+    const W = canvas.width, H = canvas.height;
+    const x1 = a.x1 * W, y1 = a.y1 * H;
+    const x2 = (a.x2 ?? a.x1) * W, y2 = (a.y2 ?? a.y1) * H;
+    const lw = Math.max(1, a.size * (W / 800) * 1.4);
+
+    ctx.save();
+    ctx.strokeStyle = a.color; ctx.fillStyle = a.color;
+    ctx.lineWidth = lw; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+    if (a.type === 'highlight') {
+        ctx.globalAlpha = .32;
+        ctx.fillRect(Math.min(x1,x2), Math.min(y1,y2), Math.abs(x2-x1), Math.abs(y2-y1));
+    }
+    else if (a.type === 'box') {
+        ctx.strokeRect(Math.min(x1,x2), Math.min(y1,y2), Math.abs(x2-x1), Math.abs(y2-y1));
+    }
+    else if (a.type === 'arrow') {
+        const head = Math.max(10, lw * 4);
+        const ang = Math.atan2(y2-y1, x2-x1);
+        ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(x2,y2);
+        ctx.lineTo(x2 - head*Math.cos(ang - Math.PI/6), y2 - head*Math.sin(ang - Math.PI/6));
+        ctx.moveTo(x2,y2);
+        ctx.lineTo(x2 - head*Math.cos(ang + Math.PI/6), y2 - head*Math.sin(ang + Math.PI/6));
+        ctx.stroke();
+    }
+    else if (a.type === 'textbox-preview') {
+        ctx.setLineDash([6, 4]);
+        ctx.strokeStyle = '#007bff';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(Math.min(x1,x2), Math.min(y1,y2), Math.abs(x2-x1), Math.abs(y2-y1));
+    }
+    else if (a.type === 'text') {
+        const bx = Math.min(x1,x2), by = Math.min(y1,y2);
+        const bw = Math.abs(x2-x1), bh = Math.abs(y2-y1);
+        const ptToPx = W / pageSizes[pageNum].w;
+        const fpx = a.fontPt * ptToPx;
+        const pad = fpx * 0.28;
+
+        if (a.border === 'fill') {
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(bx, by, bw, bh);
+        }
+        if (a.border === 'line' || a.border === 'fill') {
+            ctx.strokeStyle = a.color;
+            ctx.lineWidth = Math.max(1, fpx * 0.06);
+            ctx.strokeRect(bx, by, bw, bh);
+        }
+
+        ctx.save();
+        ctx.beginPath(); ctx.rect(bx, by, bw, bh); ctx.clip();
+        ctx.fillStyle = a.color;
+        ctx.font = `${fpx}px 'Hiragino Sans','Yu Gothic',sans-serif`;
+        ctx.textBaseline = 'top';
+        wrapLines(ctx, a.text, bw - pad*2)
+            .forEach((line, i) => ctx.fillText(line, bx + pad, by + pad + i * fpx * 1.35));
+        ctx.restore();
+    }
+    ctx.restore();
+}
+
+function wrapLines(ctx, text, maxWidth) {
+    const out = [];
+    text.split('\n').forEach(para => {
+        if (para === '') { out.push(''); return; }
+        let line = '';
+        for (const ch of para) {
+            const test = line + ch;
+            if (ctx.measureText(test).width > maxWidth && line !== '') {
+                out.push(line); line = ch;
+            } else line = test;
+        }
+        out.push(line);
+    });
+    return out;
+}
+
+/* ================= ツール切り替え ================= */
+const toolBtns = {
+    none:      document.getElementById('toolNone'),
+    text:      document.getElementById('toolText'),
+    highlight: document.getElementById('toolHighlight'),
+    arrow:     document.getElementById('toolArrow'),
+    box:       document.getElementById('toolBox'),
+    erase:     document.getElementById('toolErase')
+};
+
+Object.entries(toolBtns).forEach(([name, btn]) => {
+    btn.addEventListener('click', () => {
+        commitEditor();
+        tool = name;
+        Object.values(toolBtns).forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        document.querySelectorAll('.anno').forEach(applyCursor);
+        const msgs = {
+            none:'閲覧モード：ページ送りに集中できます',
+            text:'ドラッグで枠を作ると、その中に文字を入力できます',
+            highlight:'ドラッグした範囲をマーカーで塗ります',
+            arrow:'始点から終点へドラッグして矢印を引きます',
+            box:'ドラッグした範囲を枠線で囲みます',
+            erase:'消したい書き込みをクリックしてください'
+        };
+        showHint(msgs[name]);
+    });
+});
+
+document.getElementById('colorPicker').addEventListener('input', e => color = e.target.value);
+document.getElementById('sizePicker').addEventListener('change', e => sizeLevel = parseInt(e.target.value));
+document.getElementById('fontSizePicker').addEventListener('change', e => fontPt = parseInt(e.target.value));
+document.getElementById('textBorderPicker').addEventListener('change', e => textBorder = e.target.value);
+
+document.getElementById('undoBtn').addEventListener('click', () => {
+    commitEditor();
+    const pages = spreadMode ? [currentPage + 1, currentPage] : [currentPage];
+    for (const p of pages) {
+        if (annotations[p] && annotations[p].length) {
+            annotations[p].pop();
+            const cv = document.querySelector(`.anno[data-page="${p}"]`);
+            if (cv) redrawAnnotations(cv, p);
+            return;
+        }
+    }
+    showHint('元に戻せる書き込みがありません');
+});
+
+document.getElementById('clearPageBtn').addEventListener('click', () => {
+    commitEditor();
+    const pages = spreadMode ? [currentPage, currentPage + 1] : [currentPage];
+    if (!pages.some(p => annotations[p] && annotations[p].length)) {
+        showHint('このページに書き込みはありません'); return;
+    }
+    if (!confirm('表示中のページの書き込みをすべて消去しますか？')) return;
+    pages.forEach(p => {
+        annotations[p] = [];
+        const cv = document.querySelector(`.anno[data-page="${p}"]`);
+        if (cv) redrawAnnotations(cv, p);
+    });
+});
+
+/* ================= 表示モード・ズーム ================= */
+document.getElementById('modeSpread').addEventListener('click', async () => {
+    if (spreadMode) return;
+    spreadMode = true;
+    document.getElementById('modeSpread').classList.add('active');
+    document.getElementById('modeSingle').classList.remove('active');
+    if (currentPage > 1 && currentPage % 2 !== 0) currentPage--;
+    await renderView();
+});
+
+document.getElementById('modeSingle').addEventListener('click', async () => {
+    if (!spreadMode) return;
+    spreadMode = false;
+    document.getElementById('modeSingle').classList.add('active');
+    document.getElementById('modeSpread').classList.remove('active');
+    await renderView();
+});
+
+document.getElementById('zoomIn').addEventListener('click', async () => {
+    zoom = Math.min(3, zoom + .15); await renderView();
+});
+document.getElementById('zoomOut').addEventListener('click', async () => {
+    zoom = Math.max(.3, zoom - .15); await renderView();
+});
+document.getElementById('zoomFit').addEventListener('click', fitToScreen);
+
+async function fitToScreen() {
+    const sz = pageSizes[currentPage] || pageSizes[1];
+    const stage = document.getElementById('stage');
+    const availW = stage.clientWidth - 60;
+    const availH = stage.clientHeight - 40;
+    const cols = spreadMode ? 2 : 1;
+    baseScale = Math.min(availW / (sz.w * cols), availH / sz.h);
+    zoom = 1;
+    await renderView();
+}
+
+/* ================= 全画面 ================= */
+document.getElementById('fullscreenBtn').addEventListener('click', () => {
+    if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(()=>{});
+    else document.exitFullscreen();
+});
+document.addEventListener('fullscreenchange', () => {
+    document.getElementById('fullscreenBtn').textContent =
+        document.fullscreenElement ? '⛶ 全画面解除' : '⛶ 全画面';
+    setTimeout(fitToScreen, 120);
+});
+
+/* ================= ナビ ================= */
+document.getElementById('nextBtn').addEventListener('click', goNext);
+document.getElementById('prevBtn').addEventListener('click', goPrev);
+
+pageSlider.addEventListener('input', async e => {
+    commitEditor();
+    let p = parseInt(e.target.value);
+    if (spreadMode && p > 1 && p % 2 !== 0) p--;
+    currentPage = p;
+    await renderView();
+});
+
+document.addEventListener('keydown', e => {
+    if (activeEditor) return;
+    if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); goNext(); }
+    if (e.key === 'ArrowLeft') { e.preventDefault(); goPrev(); }
+    if (e.key === 'Escape' && document.fullscreenElement) document.exitFullscreen();
+});
+
+document.getElementById('newFileBtn').addEventListener('click', () => location.reload());
+
+window.addEventListener('resize', () => {
+    clearTimeout(window.__rz);
+    window.__rz = setTimeout(() => { if (pdfDoc) fitToScreen(); }, 250);
+});
+
+/* ================= PDF保存 ================= */
+document.getElementById('saveBtn').addEventListener('click', async () => {
+    commitEditor();
+    if (!Object.values(annotations).some(a => a && a.length)) {
+        alert('書き込みがありません。'); return;
+    }
+    showLoading('PDFを作成中...');
+    try {
+        const doc = await PDFLib.PDFDocument.load(pdfBytes.slice(0));
+        const pages = doc.getPages();
+
+        for (const key of Object.keys(annotations)) {
+            const pn = parseInt(key);
+            const list = annotations[pn];
+            if (!list || !list.length || pn < 1 || pn > pages.length) continue;
+
+            const page = pages[pn - 1];
+            const { width: PW, height: PH } = page.getSize();
+
+            for (const a of list) {
+                const c = hexToRgb(a.color);
+                const col = PDFLib.rgb(c.r/255, c.g/255, c.b/255);
+                const lw = Math.max(1, a.size * (PW / 800) * 1.4);
+                const x1 = a.x1 * PW, y1 = PH - a.y1 * PH;
+                const x2 = (a.x2 ?? a.x1) * PW, y2 = PH - (a.y2 ?? a.y1) * PH;
+
+                if (a.type === 'highlight') {
+                    page.drawRectangle({
+                        x: Math.min(x1,x2), y: Math.min(y1,y2),
+                        width: Math.abs(x2-x1), height: Math.abs(y2-y1),
+                        color: col, opacity: .32
+                    });
+                }
+                else if (a.type === 'box') {
+                    page.drawRectangle({
+                        x: Math.min(x1,x2), y: Math.min(y1,y2),
+                        width: Math.abs(x2-x1), height: Math.abs(y2-y1),
+                        borderColor: col, borderWidth: lw
+                    });
+                }
+                else if (a.type === 'arrow') {
+                    const head = Math.max(8, lw * 4);
+                    const ang = Math.atan2(y2-y1, x2-x1);
+                    page.drawLine({ start:{x:x1,y:y1}, end:{x:x2,y:y2}, thickness:lw, color:col });
+                    page.drawLine({ start:{x:x2,y:y2},
+                        end:{ x:x2-head*Math.cos(ang-Math.PI/6), y:y2-head*Math.sin(ang-Math.PI/6) },
+                        thickness:lw, color:col });
+                    page.drawLine({ start:{x:x2,y:y2},
+                        end:{ x:x2-head*Math.cos(ang+Math.PI/6), y:y2-head*Math.sin(ang+Math.PI/6) },
+                        thickness:lw, color:col });
+                }
+                else if (a.type === 'text') {
+                    const bx = Math.min(x1,x2), by = Math.min(y1,y2);
+                    const bw = Math.abs(x2-x1), bh = Math.abs(y2-y1);
+                    const png = renderTextBoxPng(a, bw, bh);
+                    const emb = await doc.embedPng(png);
+                    page.drawImage(emb, { x: bx, y: by, width: bw, height: bh });
+                }
+            }
+        }
+
+        const out = await doc.save();
+        downloadFile(out, 'annotated.pdf');
+        hideLoading();
+        alert('✅ 書き込み入りPDFをダウンロードしました！');
+    } catch (e) {
+        hideLoading();
+        alert('保存エラー: ' + e.message);
+    }
+});
+
+// テキストボックスを高解像度PNGにする（日本語対応）
+function renderTextBoxPng(a, boxW, boxH) {
+    const SS = 3;   // 3倍解像度
+    const cv = document.createElement('canvas');
+    cv.width  = Math.max(1, Math.ceil(boxW * SS));
+    cv.height = Math.max(1, Math.ceil(boxH * SS));
+    const ctx = cv.getContext('2d');
+
+    const fpx = a.fontPt * SS;
+    const pad = fpx * 0.28;
+
+    if (a.border === 'fill') {
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, cv.width, cv.height);
+    }
+    if (a.border === 'line' || a.border === 'fill') {
+        ctx.strokeStyle = a.color;
+        ctx.lineWidth = Math.max(1, fpx * 0.06);
+        ctx.strokeRect(ctx.lineWidth/2, ctx.lineWidth/2,
+                       cv.width - ctx.lineWidth, cv.height - ctx.lineWidth);
+    }
+
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, 0, cv.width, cv.height); ctx.clip();
+    ctx.fillStyle = a.color;
+    ctx.font = `${fpx}px 'Hiragino Sans','Yu Gothic',sans-serif`;
+    ctx.textBaseline = 'top';
+    wrapLines(ctx, a.text, cv.width - pad*2)
+        .forEach((line, i) => ctx.fillText(line, pad, pad + i * fpx * 1.35));
+    ctx.restore();
+
+    return cv.toDataURL('image/png');
+}
+
+/* ================= 印刷 ================= */
+document.getElementById('printBtn').addEventListener('click', async () => {
+    commitEditor();
+    showLoading('印刷用ページを準備中...');
+    const area = document.getElementById('printArea');
+    area.innerHTML = '';
+
+    try {
+        for (let i = 1; i <= totalPages; i++) {
+            loadingMsg.textContent = `印刷用ページを準備中... ${i} / ${totalPages}`;
+
+            const page = await pdfDoc.getPage(i);
+            const vp = page.getViewport({ scale: 2 });
+            const cv = document.createElement('canvas');
+            cv.width = vp.width; cv.height = vp.height;
+            await page.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise;
+
+            if (annotations[i] && annotations[i].length) {
+                const ctx = cv.getContext('2d');
+                annotations[i].forEach(a => drawShape(ctx, cv, i, a));
+            }
+
+            const wrap = document.createElement('div');
+            wrap.className = 'print-page';
+            const img = document.createElement('img');
+            img.src = cv.toDataURL('image/jpeg', .92);
+            wrap.appendChild(img);
+            area.appendChild(wrap);
+        }
+
+        hideLoading();
+        setTimeout(() => window.print(), 350);
+    } catch (e) {
+        hideLoading();
+        alert('印刷準備エラー: ' + e.message);
+    }
+});
+
+window.addEventListener('afterprint', () => {
+    document.getElementById('printArea').innerHTML = '';
+});
+
+/* ================= ユーティリティ ================= */
+function hexToRgb(hex) {
+    const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return m ? { r:parseInt(m[1],16), g:parseInt(m[2],16), b:parseInt(m[3],16) } : {r:0,g:0,b:0};
+}
+
+function downloadFile(bytes, name) {
+    const blob = new Blob([bytes], { type:'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+function showLoading(msg) { loadingMsg.textContent = msg; loadingEl.style.display = 'flex'; }
+function hideLoading() { loadingEl.style.display = 'none'; }
+
+let hintTimer = null;
+function showHint(msg) {
+    hintEl.textContent = msg;
+    hintEl.classList.add('show');
+    clearTimeout(hintTimer);
+    hintTimer = setTimeout(() => hintEl.classList.remove('show'), 2600);
+}
+</script>
+</body>
+</html>

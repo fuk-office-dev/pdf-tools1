@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDFページ並び替えツール</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+    font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background:#f5f5f5;
+    padding:20px;
+}
+
+.container { max-width:1400px; margin:0 auto; }
+
+h1 { text-align:center; color:#333; margin-bottom:8px; }
+.subtitle { text-align:center; color:#666; margin-bottom:30px; }
+
+.upload-area {
+    border:3px dashed #ccc;
+    border-radius:12px;
+    padding:50px;
+    text-align:center;
+    background:white;
+    transition:all 0.3s;
+}
+
+.upload-area:hover, .upload-area.dragover {
+    border-color:#007bff;
+    background:#f0f8ff;
+}
+
+.upload-btn {
+    display:inline-block;
+    padding:12px 30px;
+    background:#007bff;
+    color:white;
+    border-radius:6px;
+    cursor:pointer;
+    font-size:16px;
+    margin-top:15px;
+}
+
+.upload-btn:hover { background:#0056b3; }
+input[type="file"] { display:none; }
+
+.editor { display:none; }
+
+.toolbar {
+    background:white;
+    border-radius:10px;
+    padding:15px 20px;
+    margin-bottom:20px;
+    display:flex;
+    align-items:center;
+    gap:15px;
+    flex-wrap:wrap;
+    box-shadow:0 2px 8px rgba(0,0,0,0.08);
+}
+
+.toolbar-title { font-weight:bold; color:#333; font-size:15px; }
+.page-count { color:#666; font-size:14px; }
+
+.spacer { margin-left:auto; }
+
+.btn {
+    padding:10px 22px;
+    border:none;
+    border-radius:6px;
+    cursor:pointer;
+    font-size:14px;
+    transition:background 0.2s;
+}
+
+.btn-save { background:#28a745; color:white; }
+.btn-save:hover { background:#218838; }
+
+.btn-secondary { background:#6c757d; color:white; }
+.btn-secondary:hover { background:#5a6268; }
+
+.btn-danger { background:#dc3545; color:white; }
+.btn-danger:hover { background:#c82333; }
+
+.info-box {
+    background:#e7f3ff;
+    border:1px solid #b3d9ff;
+    color:#004085;
+    padding:12px 15px;
+    border-radius:8px;
+    margin-bottom:20px;
+    font-size:14px;
+}
+
+.pages-grid {
+    display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(200px,1fr));
+    gap:18px;
+    margin-bottom:30px;
+}
+
+.page-card {
+    background:white;
+    border-radius:10px;
+    padding:12px;
+    box-shadow:0 2px 8px rgba(0,0,0,0.08);
+    text-align:center;
+    cursor:grab;
+    transition:all 0.2s;
+    border:2px solid transparent;
+    position:relative;
+}
+
+.page-card:hover {
+    box-shadow:0 4px 16px rgba(0,0,0,0.18);
+    transform:translateY(-2px);
+}
+
+.page-card.dragging {
+    opacity:0.4;
+    cursor:grabbing;
+}
+
+.page-card.drag-over {
+    border-color:#007bff;
+    background:#f0f8ff;
+}
+
+.order-badge {
+    position:absolute;
+    top:8px;
+    left:8px;
+    background:#007bff;
+    color:white;
+    width:28px;
+    height:28px;
+    border-radius:50%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:13px;
+    font-weight:bold;
+    z-index:2;
+    box-shadow:0 2px 4px rgba(0,0,0,0.2);
+}
+
+.original-label {
+    font-size:11px;
+    color:#999;
+    margin-bottom:8px;
+    margin-top:4px;
+}
+
+.page-canvas {
+    width:100%;
+    height:auto;
+    border:1px solid #eee;
+    border-radius:5px;
+    margin-bottom:10px;
+    display:block;
+    background:#fafafa;
+}
+
+.move-buttons {
+    display:flex;
+    gap:5px;
+    justify-content:center;
+}
+
+.move-btn {
+    padding:6px 12px;
+    border:1px solid #007bff;
+    background:white;
+    color:#007bff;
+    border-radius:5px;
+    cursor:pointer;
+    font-size:13px;
+    font-weight:500;
+    transition:all 0.2s;
+}
+
+.move-btn:hover:not(:disabled) {
+    background:#007bff;
+    color:white;
+}
+
+.move-btn:disabled {
+    border-color:#ddd;
+    color:#ccc;
+    cursor:not-allowed;
+}
+
+.progress { display:none; margin:20px 0; }
+
+.progress-bar {
+    width:100%;
+    height:30px;
+    background:#e9ecef;
+    border-radius:8px;
+    overflow:hidden;
+}
+
+.progress-fill {
+    height:100%;
+    background:linear-gradient(90deg,#007bff,#28a745);
+    transition:width 0.3s;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    color:white;
+    font-weight:bold;
+    font-size:14px;
+}
+
+.bottom-toolbar {
+    background:white;
+    border-radius:10px;
+    padding:20px;
+    display:flex;
+    justify-content:center;
+    gap:15px;
+    flex-wrap:wrap;
+    box-shadow:0 2px 8px rgba(0,0,0,0.08);
+}
+
+@media (max-width:600px) {
+    .pages-grid { grid-template-columns:repeat(2,1fr); }
+}
+</style>
+</head>
+<body>
+<div class="container">
+    <h1>PDFページ並び替えツール</h1>
+    <p class="subtitle">ドラッグ&ドロップでページの順番を自由に入れ替えられます</p>
+
+    <div class="upload-area" id="uploadArea">
+        <p style="font-size:40px; margin-bottom:10px;">📄</p>
+        <p style="font-size:18px; color:#555;">PDFファイルをドラッグ&ドロップ</p>
+        <p style="color:#999; margin:8px 0;">または</p>
+        <label for="pdfFile" class="upload-btn">ファイルを選択</label>
+        <input type="file" id="pdfFile" accept=".pdf">
+    </div>
+
+    <div class="progress" id="progress">
+        <div class="progress-bar">
+            <div class="progress-fill" id="progressFill" style="width:0%">0%</div>
+        </div>
+    </div>
+
+    <div class="editor" id="editor">
+        <div class="toolbar">
+            <span class="toolbar-title">🔀 並び替えツール</span>
+            <span class="page-count" id="pageCount"></span>
+            <div class="spacer"></div>
+            <button class="btn btn-secondary" id="reverseBtn">⇅ 逆順にする</button>
+            <button class="btn btn-danger" id="resetBtn">↺ 元の順番に戻す</button>
+            <button class="btn btn-save" id="saveBtn">💾 保存</button>
+        </div>
+
+        <div class="info-box">
+            💡 <strong>使い方：</strong>
+            ページをドラッグして好きな位置にドロップ、または「←」「→」ボタンで1つずつ移動できます。青い丸の数字が新しいページ番号です。
+        </div>
+
+        <div class="pages-grid" id="pagesGrid"></div>
+
+        <div class="bottom-toolbar">
+            <button class="btn btn-save" id="saveBtn2">💾 並び替えて保存</button>
+            <button class="btn btn-secondary" id="newFileBtn">🔄 別のファイルを開く</button>
+        </div>
+    </div>
+</div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+
+let pdfJsDoc = null;
+let pdfBytes = null;
+let totalPages = 0;
+let pageOrder = [];      // 現在の並び（元のページ番号の配列）
+let thumbnails = {};     // 元ページ番号 → dataURL
+let dragIndex = null;
+
+const uploadArea  = document.getElementById('uploadArea');
+const pdfFileInput= document.getElementById('pdfFile');
+const editor      = document.getElementById('editor');
+const pagesGrid   = document.getElementById('pagesGrid');
+const pageCountEl = document.getElementById('pageCount');
+const progress    = document.getElementById('progress');
+const progressFill= document.getElementById('progressFill');
+
+uploadArea.addEventListener('dragover', e => {
+    e.preventDefault();
+    uploadArea.classList.add('dragover');
+});
+uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+uploadArea.addEventListener('drop', e => {
+    e.preventDefault();
+    uploadArea.classList.remove('dragover');
+    const f = e.dataTransfer.files[0];
+    if (f && f.type === 'application/pdf') loadPDF(f);
+});
+pdfFileInput.addEventListener('change', e => {
+    if (e.target.files[0]) loadPDF(e.target.files[0]);
+});
+
+async function loadPDF(file) {
+    showProgress(5);
+    try {
+        const buf = await file.arrayBuffer();
+        pdfBytes = buf.slice(0);
+        pdfJsDoc = await pdfjsLib.getDocument({ data: buf }).promise;
+        totalPages = pdfJsDoc.numPages;
+        pageOrder = Array.from({length: totalPages}, (_, i) => i + 1);
+        thumbnails = {};
+
+        uploadArea.style.display = 'none';
+        editor.style.display = 'block';
+        pageCountEl.textContent = `全 ${totalPages} ページ`;
+
+        // サムネイルを一度だけ生成
+        for (let i = 1; i <= totalPages; i++) {
+            showProgress(Math.round((i / totalPages) * 90) + 5);
+            const page = await pdfJsDoc.getPage(i);
+            const vp = page.getViewport({ scale: 0.5 });
+            const cv = document.createElement('canvas');
+            cv.width = vp.width;
+            cv.height = vp.height;
+            await page.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise;
+            thumbnails[i] = cv.toDataURL('image/jpeg', 0.8);
+        }
+
+        renderPages();
+        hideProgress();
+    } catch(e) {
+        alert('読み込みエラー: ' + e.message);
+        hideProgress();
+    }
+}
+
+function renderPages() {
+    pagesGrid.innerHTML = '';
+
+    pageOrder.forEach((originalPage, index) => {
+        const card = document.createElement('div');
+        card.className = 'page-card';
+        card.draggable = true;
+        card.dataset.index = index;
+
+        card.innerHTML = `
+            <div class="order-badge">${index + 1}</div>
+            <img class="page-canvas" src="${thumbnails[originalPage]}" alt="ページ${originalPage}">
+            <div class="original-label">元のページ ${originalPage}</div>
+            <div class="move-buttons">
+                <button class="move-btn" onclick="movePage(${index}, -1)" ${index === 0 ? 'disabled' : ''}>←</button>
+                <button class="move-btn" onclick="movePage(${index}, 1)" ${index === pageOrder.length - 1 ? 'disabled' : ''}>→</button>
+            </div>
+        `;
+
+        // ドラッグ&ドロップ
+        card.addEventListener('dragstart', e => {
+            dragIndex = index;
+            card.classList.add('dragging');
+        });
+
+        card.addEventListener('dragend', () => {
+            card.classList.remove('dragging');
+            document.querySelectorAll('.page-card').forEach(c => c.classList.remove('drag-over'));
+        });
+
+        card.addEventListener('dragover', e => {
+            e.preventDefault();
+            if (dragIndex !== index) card.classList.add('drag-over');
+        });
+
+        card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
+
+        card.addEventListener('drop', e => {
+            e.preventDefault();
+            card.classList.remove('drag-over');
+            if (dragIndex === null || dragIndex === index) return;
+            const moved = pageOrder.splice(dragIndex, 1)[0];
+            pageOrder.splice(index, 0, moved);
+            dragIndex = null;
+            renderPages();
+        });
+
+        pagesGrid.appendChild(card);
+    });
+}
+
+window.movePage = function(index, direction) {
+    const newIndex = index + direction;
+    if (newIndex < 0 || newIndex >= pageOrder.length) return;
+    [pageOrder[index], pageOrder[newIndex]] = [pageOrder[newIndex], pageOrder[index]];
+    renderPages();
+};
+
+document.getElementById('reverseBtn').addEventListener('click', () => {
+    pageOrder.reverse();
+    renderPages();
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+    pageOrder = Array.from({length: totalPages}, (_, i) => i + 1);
+    renderPages();
+});
+
+async function savePDF() {
+    const isUnchanged = pageOrder.every((p, i) => p === i + 1);
+    if (isUnchanged) {
+        alert('順番が変更されていません。');
+        return;
+    }
+
+    showProgress(10);
+    try {
+        const srcDoc = await PDFLib.PDFDocument.load(pdfBytes.slice(0));
+        const newDoc = await PDFLib.PDFDocument.create();
+
+        for (let i = 0; i < pageOrder.length; i++) {
+            const [copied] = await newDoc.copyPages(srcDoc, [pageOrder[i] - 1]);
+            newDoc.addPage(copied);
+            showProgress(10 + Math.round((i / pageOrder.length) * 80));
+        }
+
+        const saved = await newDoc.save();
+        download(saved, 'reordered.pdf');
+        showProgress(100);
+        setTimeout(hideProgress, 500);
+        alert('✅ 並び替えたPDFをダウンロードしました！');
+    } catch(e) {
+        alert('保存エラー: ' + e.message);
+        hideProgress();
+    }
+}
+
+document.getElementById('saveBtn').addEventListener('click', savePDF);
+document.getElementById('saveBtn2').addEventListener('click', savePDF);
+document.getElementById('newFileBtn').addEventListener('click', () => location.reload());
+
+function showProgress(pct) {
+    progress.style.display = 'block';
+    progressFill.style.width = pct + '%';
+    progressFill.textContent = pct + '%';
+}
+
+function hideProgress() { progress.style.display = 'none'; }
+
+function download(bytes, name) {
+    const blob = new Blob([bytes], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>

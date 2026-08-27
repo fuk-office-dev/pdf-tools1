@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDFページ編集ツール</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Hiragino Sans','Yu Gothic',Roboto,sans-serif;
+     background:#f5f5f5;padding:20px;color:#333;}
+.container{max-width:1300px;margin:0 auto;}
+h1{text-align:center;margin-bottom:8px;}
+.subtitle{text-align:center;color:#666;margin-bottom:26px;}
+
+.upload{border:3px dashed #ccc;border-radius:12px;padding:50px;text-align:center;
+        background:#fff;transition:all .3s;}
+.upload:hover,.upload.dragover{border-color:#007bff;background:#f0f8ff;}
+.upload .icon{font-size:42px;margin-bottom:10px;}
+.upload .main{font-size:17px;color:#555;}
+.upload .or{color:#aaa;margin:8px 0;}
+.ubtn{display:inline-block;padding:12px 30px;background:#007bff;color:#fff;
+      border-radius:6px;cursor:pointer;font-size:16px;}
+.ubtn:hover{background:#0056b3;}
+input[type="file"]{display:none;}
+
+#editor{display:none;}
+
+.tabs{display:flex;gap:10px;background:#fff;padding:10px;border-radius:10px;
+      margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,.07);flex-wrap:wrap;}
+.tab{flex:1;min-width:150px;padding:14px;border:2px solid #e0e0e0;background:#fff;
+     border-radius:8px;cursor:pointer;font-size:15px;transition:all .2s;font-weight:500;}
+.tab:hover{background:#f8f9fa;}
+.tab.active{background:#007bff;color:#fff;border-color:#007bff;}
+
+.panel{display:none;background:#fff;padding:22px;border-radius:10px;
+       box-shadow:0 2px 8px rgba(0,0,0,.07);margin-bottom:20px;}
+.panel.active{display:block;}
+
+.info{background:#e7f3ff;border:1px solid #b3d9ff;color:#004085;
+      padding:12px 15px;border-radius:8px;margin-bottom:18px;font-size:14px;}
+
+.toolrow{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:18px;
+         padding-bottom:16px;border-bottom:1px solid #eee;}
+.toolrow .label{font-size:13px;color:#777;}
+.spacer{margin-left:auto;}
+
+.btn{padding:11px 24px;border:none;border-radius:6px;cursor:pointer;font-size:14px;
+     transition:background .2s;}
+.btn-primary{background:#28a745;color:#fff;}
+.btn-primary:hover{background:#218838;}
+.btn-secondary{background:#6c757d;color:#fff;}
+.btn-secondary:hover{background:#5a6268;}
+.btn-danger{background:#dc3545;color:#fff;}
+.btn-danger:hover{background:#c82333;}
+.btn-outline{background:#fff;border:1px solid #007bff;color:#007bff;}
+.btn-outline:hover{background:#007bff;color:#fff;}
+
+select.sel{padding:9px;border:1px solid #ddd;border-radius:6px;font-size:14px;}
+
+.actions{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:20px;
+         padding-top:18px;border-top:1px solid #eee;}
+
+/* ページ一覧 */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:16px;}
+.pcard{background:#f8f9fa;border:2px solid #e0e0e0;border-radius:9px;padding:12px;
+       text-align:center;transition:all .2s;position:relative;}
+.pcard:hover{box-shadow:0 4px 14px rgba(0,0,0,.13);}
+.pcard img{width:100%;border:1px solid #ddd;border-radius:5px;background:#fff;
+           margin-bottom:9px;transition:transform .3s;}
+.pcard .pnum{font-weight:bold;color:#007bff;font-size:13px;margin-bottom:7px;}
+.pcard .tag{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;
+            background:#e9ecef;color:#666;margin-bottom:9px;}
+.pcard .tag.on{background:#d4edda;color:#155724;font-weight:bold;}
+
+/* 削除選択 */
+.pcard.sel-del{opacity:.35;border-color:#dc3545;}
+.pcard.sel-del::after{content:'削除';position:absolute;top:50%;left:50%;
+    transform:translate(-50%,-50%);background:#dc3545;color:#fff;padding:6px 16px;
+    border-radius:6px;font-weight:bold;font-size:13px;}
+.pcard.sel-ocr{border-color:#007bff;background:#e7f3ff;}
+
+.pcard .minis{display:flex;gap:5px;justify-content:center;flex-wrap:wrap;}
+.mini{padding:6px 11px;border:1px solid #007bff;background:#fff;color:#007bff;
+      border-radius:5px;cursor:pointer;font-size:12px;}
+.mini:hover{background:#007bff;color:#fff;}
+.mini.red{border-color:#dc3545;color:#dc3545;}
+.mini.red:hover{background:#dc3545;color:#fff;}
+
+/* OCR結果 */
+#ocrOut{margin-top:20px;display:none;}
+#ocrText{width:100%;min-height:300px;padding:15px;border:1px solid #ddd;
+         border-radius:6px;font-family:'Courier New',monospace;font-size:14px;
+         resize:vertical;line-height:1.6;}
+
+.progress{display:none;margin:18px 0;}
+.pbar{width:100%;height:28px;background:#e9ecef;border-radius:7px;overflow:hidden;}
+.pfill{height:100%;background:linear-gradient(90deg,#007bff,#28a745);transition:width .3s;
+       display:flex;align-items:center;justify-content:center;color:#fff;font-weight:bold;font-size:13px;}
+.plabel{text-align:center;margin-top:7px;color:#777;font-size:13px;}
+</style>
+</head>
+<body>
+<div class="container">
+    <h1>PDFページ編集ツール</h1>
+    <p class="subtitle">ページの削除・回転・文字の取り出しが1つでできます</p>
+
+    <div class="upload" id="upload">
+        <div class="icon">📄</div>
+        <p class="main">PDFをドラッグ&amp;ドロップ</p>
+        <p class="or">または</p>
+        <label for="pdfFile" class="ubtn">ファイルを選択</label>
+        <input type="file" id="pdfFile" accept=".pdf">
+    </div>
+
+    <div class="progress" id="progress">
+        <div class="pbar"><div class="pfill" id="pfill" style="width:0%">0%</div></div>
+        <div class="plabel" id="plabel"></div>
+    </div>
+
+    <div id="editor">
+        <div class="tabs">
+            <button class="tab active" data-panel="del">🗑️ ページを削除</button>
+            <button class="tab" data-panel="rot">🔄 向きを直す</button>
+            <button class="tab" data-panel="ocr">📝 文字を取り出す</button>
+        </div>
+
+        <!-- ===== 削除 ===== -->
+        <div class="panel active" id="delPanel">
+            <div class="info">
+                💡 いらないページをクリックして選ぶと、赤くなって「削除」と表示されます。選び終わったら下のボタンで保存してください。
+            </div>
+            <div class="toolrow">
+                <button class="btn btn-outline" id="delAll">すべて選択 / 解除</button>
+                <button class="btn btn-outline" id="delInvert">選択を反転</button>
+                <span class="spacer"></span>
+                <span class="label" id="delCount">0 ページ選択中</span>
+            </div>
+            <div class="grid" id="delGrid"></div>
+            <div class="actions">
+                <button class="btn btn-primary" id="delRun">🗑️ 選んだページを削除して保存</button>
+                <button class="btn btn-secondary" id="delReset">↺ 選択をリセット</button>
+            </div>
+        </div>
+
+        <!-- ===== 回転 ===== -->
+        <div class="panel" id="rotPanel">
+            <div class="info">
+                💡 各ページのボタンで向きを直せます。全ページまとめて回すこともできます。
+            </div>
+            <div class="toolrow">
+                <span class="label">全ページ一括：</span>
+                <button class="btn btn-outline" id="bulk90">↷ 右90°</button>
+                <button class="btn btn-outline" id="bulk180">↕ 180°</button>
+                <button class="btn btn-outline" id="bulk270">↶ 左90°</button>
+                <span class="spacer"></span>
+                <span class="label" id="rotCount">0 ページ変更中</span>
+            </div>
+            <div class="grid" id="rotGrid"></div>
+            <div class="actions">
+                <button class="btn btn-primary" id="rotRun">🔄 向きを直して保存</button>
+                <button class="btn btn-secondary" id="rotReset">↺ すべて元に戻す</button>
+            </div>
+        </div>
+
+        <!-- ===== OCR ===== -->
+        <div class="panel" id="ocrPanel">
+            <div class="info">
+                💡 文字を取り出したいページをクリックして選び、下のボタンを押してください。1ページあたり数秒〜十数秒かかります。
+            </div>
+            <div class="toolrow">
+                <span class="label">言語：</span>
+                <select class="sel" id="ocrLang">
+                    <option value="jpn" selected>日本語</option>
+                    <option value="eng">英語</option>
+                    <option value="jpn+eng">日本語＋英語</option>
+                </select>
+                <button class="btn btn-outline" id="ocrAll">すべて選択 / 解除</button>
+                <span class="spacer"></span>
+                <span class="label" id="ocrCount">0 ページ選択中</span>
+            </div>
+            <div class="grid" id="ocrGrid"></div>
+            <div class="actions">
+                <button class="btn btn-primary" id="ocrRun">📝 選んだページから文字を取り出す</button>
+            </div>
+
+            <div id="ocrOut">
+                <h3 style="margin-bottom:12px;">取り出した文字</h3>
+                <textarea id="ocrText" readonly></textarea>
+                <div class="actions">
+                    <button class="btn btn-secondary" id="ocrCopy">📋 コピー</button>
+                    <button class="btn btn-secondary" id="ocrDl">💾 テキストファイルで保存</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="actions">
+            <button class="btn btn-secondary" id="newFile">🔄 別のファイルを開く</button>
+        </div>
+    </div>
+</div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+
+let pdfDoc = null, pdfBytes = null, total = 0, baseName = '';
+let thumbs = {};
+let deleted = new Set();
+let rotations = {};
+let ocrSel = new Set();
+
+const upload = document.getElementById('upload');
+const editor = document.getElementById('editor');
+const progress = document.getElementById('progress');
+const pfill = document.getElementById('pfill');
+const plabel = document.getElementById('plabel');
+
+/* ===== タブ ===== */
+document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById(tab.dataset.panel + 'Panel').classList.add('active');
+    });
+});
+
+/* ===== 読み込み ===== */
+upload.addEventListener('dragover', e => { e.preventDefault(); upload.classList.add('dragover'); });
+upload.addEventListener('dragleave', () => upload.classList.remove('dragover'));
+upload.addEventListener('drop', e => {
+    e.preventDefault(); upload.classList.remove('dragover');
+    const f = e.dataTransfer.files[0];
+    if (f && f.type === 'application/pdf') load(f);
+});
+document.getElementById('pdfFile').addEventListener('change', e => {
+    if (e.target.files[0]) load(e.target.files[0]);
+});
+
+async function load(file) {
+    showProg(5, 'PDFを読み込み中...');
+    try {
+        const buf = await file.arrayBuffer();
+        pdfBytes = buf.slice(0);
+        pdfDoc = await pdfjsLib.getDocument({ data: buf }).promise;
+        total = pdfDoc.numPages;
+        baseName = file.name.replace(/\.pdf$/i, '');
+        deleted.clear(); rotations = {}; ocrSel.clear(); thumbs = {};
+
+        for (let i = 1; i <= total; i++) {
+            showProg(5 + (i/total)*90, `ページを読み込み中... ${i} / ${total}`);
+            const page = await pdfDoc.getPage(i);
+            const vp = page.getViewport({ scale: 0.45 });
+            const cv = document.createElement('canvas');
+            cv.width = vp.width; cv.height = vp.height;
+            await page.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise;
+            thumbs[i] = cv.toDataURL('image/jpeg', .8);
+        }
+
+        upload.style.display = 'none';
+        editor.style.display = 'block';
+        buildAll();
+        hideProg();
+    } catch(e) {
+        hideProg();
+        alert('読み込みエラー: ' + e.message);
+    }
+}
+
+function buildAll() { buildDel(); buildRot(); buildOcr(); }
+
+/* ===== 削除 ===== */
+function buildDel() {
+    const g = document.getElementById('delGrid');
+    g.innerHTML = '';
+    for (let i = 1; i <= total; i++) {
+        const d = document.createElement('div');
+        d.className = 'pcard' + (deleted.has(i) ? ' sel-del' : '');
+        d.style.cursor = 'pointer';
+        d.innerHTML = `<div class="pnum">ページ ${i}</div><img src="${thumbs[i]}">`;
+        d.addEventListener('click', () => {
+            deleted.has(i) ? deleted.delete(i) : deleted.add(i);
+            d.classList.toggle('sel-del');
+            updDelCount();
+        });
+        g.appendChild(d);
+    }
+    updDelCount();
+}
+function updDelCount() {
+    document.getElementById('delCount').textContent = `${deleted.size} ページ選択中`;
+}
+
+document.getElementById('delAll').addEventListener('click', () => {
+    if (deleted.size === total) deleted.clear();
+    else for (let i = 1; i <= total; i++) deleted.add(i);
+    buildDel();
+});
+document.getElementById('delInvert').addEventListener('click', () => {
+    const n = new Set();
+    for (let i = 1; i <= total; i++) if (!deleted.has(i)) n.add(i);
+    deleted = n;
+    buildDel();
+});
+document.getElementById('delReset').addEventListener('click', () => { deleted.clear(); buildDel(); });
+
+document.getElementById('delRun').addEventListener('click', async () => {
+    if (!deleted.size) { alert('削除するページを選んでください'); return; }
+    if (deleted.size === total) { alert('すべてのページは削除できません'); return; }
+
+    showProg(10, '保存中...');
+    try {
+        const src = await PDFLib.PDFDocument.load(pdfBytes.slice(0));
+        const out = await PDFLib.PDFDocument.create();
+        const keep = [];
+        for (let i = 1; i <= total; i++) if (!deleted.has(i)) keep.push(i-1);
+        const pages = await out.copyPages(src, keep);
+        pages.forEach(p => out.addPage(p));
+        showProg(85, 'ファイルを作成中...');
+        dl(await out.save(), `${baseName}_削除後.pdf`);
+        showProg(100, '完了');
+        setTimeout(hideProg, 500);
+        alert(`✅ ${deleted.size} ページを削除したPDFを保存しました！`);
+    } catch(e) { hideProg(); alert('エラー: ' + e.message); }
+});
+
+/* ===== 回転 ===== */
+function buildRot() {
+    const g = document.getElementById('rotGrid');
+    g.innerHTML = '';
+    for (let i = 1; i <= total; i++) {
+        const deg = rotations[i] || 0;
+        const d = document.createElement('div');
+        d.className = 'pcard';
+        d.id = `rot-${i}`;
+        d.innerHTML = `
+            <div class="pnum">ページ ${i}</div>
+            <div class="tag ${deg?'on':''}" id="rtag-${i}">${deg ? deg+'° 回転' : '変更なし'}</div>
+            <img id="rimg-${i}" src="${thumbs[i]}" style="transform:rotate(${deg}deg)">
+            <div class="minis">
+                <button class="mini" onclick="rot(${i},90)">↷ 右90°</button>
+                <button class="mini" onclick="rot(${i},180)">↕ 180°</button>
+                <button class="mini" onclick="rot(${i},270)">↶ 左90°</button>
+                <button class="mini red" onclick="rotReset(${i})">✕</button>
+            </div>`;
+        g.appendChild(d);
+    }
+    updRotCount();
+}
+
+window.rot = function(i, d) {
+    rotations[i] = ((rotations[i] || 0) + d) % 360;
+    if (!rotations[i]) delete rotations[i];
+    paintRot(i);
+};
+window.rotReset = function(i) { delete rotations[i]; paintRot(i); };
+
+function paintRot(i) {
+    const deg = rotations[i] || 0;
+    const img = document.getElementById(`rimg-${i}`);
+    const tag = document.getElementById(`rtag-${i}`);
+    img.style.transform = `rotate(${deg}deg)`;
+    tag.textContent = deg ? deg + '° 回転' : '変更なし';
+    tag.className = 'tag' + (deg ? ' on' : '');
+    updRotCount();
+}
+function updRotCount() {
+    document.getElementById('rotCount').textContent =
+        `${Object.keys(rotations).length} ページ変更中`;
+}
+
+[[90,'bulk90'],[180,'bulk180'],[270,'bulk270']].forEach(([d, id]) => {
+    document.getElementById(id).addEventListener('click', () => {
+        for (let i = 1; i <= total; i++) rot(i, d);
+    });
+});
+
+document.getElementById('rotReset').addEventListener('click', () => {
+    if (!Object.keys(rotations).length) return;
+    if (!confirm('すべての回転を元に戻しますか？')) return;
+    rotations = {};
+    buildRot();
+});
+
+document.getElementById('rotRun').addEventListener('click', async () => {
+    if (!Object.keys(rotations).length) { alert('回転したページがありません'); return; }
+    showProg(10, '保存中...');
+    try {
+        const doc = await PDFLib.PDFDocument.load(pdfBytes.slice(0));
+        const pages = doc.getPages();
+        Object.keys(rotations).forEach(k => {
+            const p = pages[parseInt(k) - 1];
+            const cur = p.getRotation().angle;
+            p.setRotation(PDFLib.degrees((cur + rotations[k]) % 360));
+        });
+        showProg(85, 'ファイルを作成中...');
+        dl(await doc.save(), `${baseName}_回転後.pdf`);
+        showProg(100, '完了');
+        setTimeout(hideProg, 500);
+        alert('✅ 向きを直したPDFを保存しました！');
+    } catch(e) { hideProg(); alert('エラー: ' + e.message); }
+});
+
+/* ===== OCR ===== */
+function buildOcr() {
+    const g = document.getElementById('ocrGrid');
+    g.innerHTML = '';
+    for (let i = 1; i <= total; i++) {
+        const d = document.createElement('div');
+        d.className = 'pcard' + (ocrSel.has(i) ? ' sel-ocr' : '');
+        d.style.cursor = 'pointer';
+        d.innerHTML = `<div class="pnum">ページ ${i}</div><img src="${thumbs[i]}">`;
+        d.addEventListener('click', () => {
+            ocrSel.has(i) ? ocrSel.delete(i) : ocrSel.add(i);
+            d.classList.toggle('sel-ocr');
+            updOcrCount();
+        });
+        g.appendChild(d);
+    }
+    updOcrCount();
+}
+function updOcrCount() {
+    document.getElementById('ocrCount').textContent = `${ocrSel.size} ページ選択中`;
+}
+
+document.getElementById('ocrAll').addEventListener('click', () => {
+    if (ocrSel.size === total) ocrSel.clear();
+    else for (let i = 1; i <= total; i++) ocrSel.add(i);
+    buildOcr();
+});
+
+document.getElementById('ocrRun').addEventListener('click', async () => {
+    if (!ocrSel.size) { alert('文字を取り出すページを選んでください'); return; }
+    const lang = document.getElementById('ocrLang').value;
+    const list = [...ocrSel].sort((a,b) => a-b);
+    let out = '';
+
+    try {
+        for (let i = 0; i < list.length; i++) {
+            const pn = list[i];
+            showProg((i/list.length)*100, `ページ ${pn} を解析中...（${i+1} / ${list.length}）`);
+
+            const page = await pdfDoc.getPage(pn);
+            const vp = page.getViewport({ scale: 2 });
+            const cv = document.createElement('canvas');
+            cv.width = vp.width; cv.height = vp.height;
+            await page.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise;
+
+            const res = await Tesseract.recognize(cv.toDataURL('image/png'), lang, {});
+            out += `━━━━━━━ ページ ${pn} ━━━━━━━\n\n${res.data.text.trim()}\n\n`;
+        }
+
+        document.getElementById('ocrText').value = out.trim();
+        document.getElementById('ocrOut').style.display = 'block';
+        showProg(100, '完了');
+        setTimeout(hideProg, 500);
+    } catch(e) { hideProg(); alert('解析エラー: ' + e.message); }
+});
+
+document.getElementById('ocrCopy').addEventListener('click', () => {
+    const t = document.getElementById('ocrText');
+    t.select();
+    document.execCommand('copy');
+    alert('コピーしました！');
+});
+
+document.getElementById('ocrDl').addEventListener('click', () => {
+    const blob = new Blob([document.getElementById('ocrText').value], {type:'text/plain'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `${baseName}_文字.txt`;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+});
+
+document.getElementById('newFile').addEventListener('click', () => location.reload());
+
+/* ===== 共通 ===== */
+function showProg(pct, msg) {
+    progress.style.display = 'block';
+    const v = Math.round(pct);
+    pfill.style.width = v + '%';
+    pfill.textContent = v + '%';
+    plabel.textContent = msg || '';
+}
+function hideProg() { progress.style.display = 'none'; }
+
+function dl(bytes, name) {
+    const blob = new Blob([bytes], { type:'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>
