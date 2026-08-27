@@ -1,484 +1,369 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>JPEG→PDF変換ツール</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
-<style>
-* { margin:0; padding:0; box-sizing:border-box; }
-
-body {
-    font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background:#f5f5f5;
-    padding:20px;
-}
-
-.container { max-width:1200px; margin:0 auto; }
-
-h1 { text-align:center; color:#333; margin-bottom:8px; }
-.subtitle { text-align:center; color:#666; margin-bottom:30px; }
-
-.upload-area {
-    border:3px dashed #ccc;
-    border-radius:12px;
-    padding:50px;
-    text-align:center;
-    background:white;
-    transition:all 0.3s;
-}
-
-.upload-area:hover, .upload-area.dragover {
-    border-color:#007bff;
-    background:#f0f8ff;
-}
-
-.upload-btn {
-    display:inline-block;
-    padding:12px 30px;
-    background:#007bff;
-    color:white;
-    border-radius:6px;
-    cursor:pointer;
-    font-size:16px;
-    margin-top:15px;
-}
-
-.upload-btn:hover { background:#0056b3; }
-input[type="file"] { display:none; }
-
-.settings {
-    background:white;
-    padding:20px;
-    border-radius:10px;
-    margin-bottom:20px;
-    display:none;
-    box-shadow:0 2px 8px rgba(0,0,0,0.08);
-}
-
-.settings h3 { margin-bottom:15px; color:#333; font-size:16px; }
-
-.setting-row {
-    display:flex;
-    gap:25px;
-    flex-wrap:wrap;
-}
-
-.setting-group { flex:1; min-width:200px; }
-
-.setting-group label {
-    display:block;
-    margin-bottom:8px;
-    color:#555;
-    font-weight:500;
-    font-size:14px;
-}
-
-.setting-group select {
-    width:100%;
-    padding:10px;
-    border:1px solid #ddd;
-    border-radius:5px;
-    font-size:14px;
-}
-
-.info-box {
-    background:#e7f3ff;
-    border:1px solid #b3d9ff;
-    color:#004085;
-    padding:12px 15px;
-    border-radius:8px;
-    margin-bottom:20px;
-    font-size:14px;
-}
-
-.preview {
-    background:white;
-    padding:20px;
-    border-radius:10px;
-    margin-bottom:20px;
-    display:none;
-    box-shadow:0 2px 8px rgba(0,0,0,0.08);
-}
-
-.preview h3 { margin-bottom:15px; color:#333; font-size:16px; }
-
-.images-grid {
-    display:grid;
-    grid-template-columns:repeat(auto-fill, minmax(180px,1fr));
-    gap:15px;
-    margin-bottom:20px;
-}
-
-.image-card {
-    background:#f8f9fa;
-    border:2px solid #e0e0e0;
-    border-radius:8px;
-    padding:10px;
-    text-align:center;
-    position:relative;
-    transition:all 0.2s;
-}
-
-.image-card:hover {
-    border-color:#007bff;
-    box-shadow:0 4px 12px rgba(0,0,0,0.12);
-}
-
-.image-card img {
-    width:100%;
-    max-height:160px;
-    object-fit:contain;
-    border-radius:5px;
-    margin-bottom:8px;
-    background:white;
-}
-
-.order-badge {
-    position:absolute;
-    top:6px;
-    left:6px;
-    background:#007bff;
-    color:white;
-    width:26px;
-    height:26px;
-    border-radius:50%;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    font-size:12px;
-    font-weight:bold;
-    z-index:2;
-}
-
-.remove-btn {
-    position:absolute;
-    top:6px;
-    right:6px;
-    background:#dc3545;
-    color:white;
-    border:none;
-    border-radius:50%;
-    width:24px;
-    height:24px;
-    cursor:pointer;
-    font-size:14px;
-    line-height:1;
-    z-index:2;
-}
-
-.remove-btn:hover { background:#c82333; }
-
-.image-name {
-    font-size:11px;
-    color:#777;
-    margin-bottom:8px;
-    word-break:break-all;
-    max-height:28px;
-    overflow:hidden;
-}
-
-.move-buttons { display:flex; gap:5px; justify-content:center; }
-
-.move-btn {
-    padding:5px 12px;
-    border:1px solid #007bff;
-    background:white;
-    color:#007bff;
-    border-radius:4px;
-    cursor:pointer;
-    font-size:12px;
-}
-
-.move-btn:hover:not(:disabled) { background:#007bff; color:white; }
-.move-btn:disabled { border-color:#ddd; color:#ccc; cursor:not-allowed; }
-
-.btn {
-    padding:12px 28px;
-    border:none;
-    border-radius:6px;
-    cursor:pointer;
-    font-size:15px;
-    transition:background 0.2s;
-}
-
-.btn-save { background:#28a745; color:white; }
-.btn-save:hover { background:#218838; }
-
-.btn-secondary { background:#6c757d; color:white; }
-.btn-secondary:hover { background:#5a6268; }
-
-.actions {
-    display:flex;
-    gap:12px;
-    justify-content:center;
-    flex-wrap:wrap;
-}
-
-.progress { display:none; margin:20px 0; }
-
-.progress-bar {
-    width:100%;
-    height:30px;
-    background:#e9ecef;
-    border-radius:8px;
-    overflow:hidden;
-}
-
-.progress-fill {
-    height:100%;
-    background:linear-gradient(90deg,#007bff,#28a745);
-    transition:width 0.3s;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    color:white;
-    font-weight:bold;
-    font-size:14px;
-}
-</style>
-</head>
-<body>
-<div class="container">
-    <h1>JPEG→PDF変換ツール</h1>
-    <p class="subtitle">複数の画像を1つのPDFにまとめます</p>
-
-    <div class="upload-area" id="uploadArea">
-        <p style="font-size:40px; margin-bottom:10px;">🖼️</p>
-        <p style="font-size:18px; color:#555;">JPEG / PNG 画像をドラッグ&ドロップ</p>
-        <p style="color:#999; margin:8px 0;">または</p>
-        <label for="imageFiles" class="upload-btn">ファイルを選択（複数可）</label>
-        <input type="file" id="imageFiles" accept="image/jpeg,image/jpg,image/png" multiple>
-    </div>
-
-    <div class="settings" id="settings">
-        <h3>⚙️ PDF設定</h3>
-        <div class="setting-row">
-            <div class="setting-group">
-                <label>ページサイズ</label>
-                <select id="pageSize">
-                    <option value="a4" selected>A4</option>
-                    <option value="a3">A3</option>
-                    <option value="letter">レター</option>
-                    <option value="original">画像サイズに合わせる</option>
-                </select>
-            </div>
-            <div class="setting-group">
-                <label>画像の配置</label>
-                <select id="imageLayout">
-                    <option value="fit" selected>余白ありで収める（推奨）</option>
-                    <option value="fill">ページ全体に広げる</option>
-                </select>
-            </div>
-            <div class="setting-group">
-                <label>ページの向き</label>
-                <select id="pageOrientation">
-                    <option value="auto" selected>自動（画像に合わせる）</option>
-                    <option value="portrait">縦向き</option>
-                    <option value="landscape">横向き</option>
-                </select>
-            </div>
-        </div>
-    </div>
-
-    <div class="progress" id="progress">
-        <div class="progress-bar">
-            <div class="progress-fill" id="progressFill" style="width:0%">0%</div>
-        </div>
-    </div>
-
-    <div class="preview" id="preview">
-        <div class="info-box">
-            💡 「←」「→」ボタンで順番を入れ替え、「×」で不要な画像を削除できます。青い丸の数字がPDFのページ順です。
-        </div>
-        <h3>📸 画像一覧（<span id="imageCount">0</span>枚）</h3>
-        <div class="images-grid" id="imagesGrid"></div>
-        <div class="actions">
-            <button class="btn btn-save" id="convertBtn">📄 PDFに変換してダウンロード</button>
-            <button class="btn btn-secondary" id="resetBtn">🔄 やり直す</button>
-        </div>
-    </div>
-</div>
-
-<script>
-let images = [];
-
-const uploadArea = document.getElementById('uploadArea');
-const imageFilesInput = document.getElementById('imageFiles');
-const settings = document.getElementById('settings');
-const preview = document.getElementById('preview');
-const imagesGrid = document.getElementById('imagesGrid');
-const imageCount = document.getElementById('imageCount');
-const progress = document.getElementById('progress');
-const progressFill = document.getElementById('progressFill');
-
-uploadArea.addEventListener('dragover', e => {
-    e.preventDefault();
-    uploadArea.classList.add('dragover');
-});
-uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
-uploadArea.addEventListener('drop', e => {
-    e.preventDefault();
-    uploadArea.classList.remove('dragover');
-    const files = Array.from(e.dataTransfer.files).filter(f =>
-        ['image/jpeg','image/jpg','image/png'].includes(f.type)
-    );
-    if (files.length) handleFiles(files);
-});
-
-imageFilesInput.addEventListener('change', e => {
-    const files = Array.from(e.target.files);
-    if (files.length) handleFiles(files);
-});
-
-async function handleFiles(files) {
-    // ファイル名で自然順ソート
-    files.sort((a, b) => a.name.localeCompare(b.name, 'ja', { numeric: true }));
-
-    images = [];
-    for (const file of files) {
-        const dataUrl = await readAsDataURL(file);
-        images.push({ file, name: file.name, dataUrl });
-    }
-
-    uploadArea.style.display = 'none';
-    settings.style.display = 'block';
-    preview.style.display = 'block';
-    renderImages();
-}
-
-function readAsDataURL(file) {
-    return new Promise((resolve, reject) => {
-        const r = new FileReader();
-        r.onload = e => resolve(e.target.result);
-        r.onerror = reject;
-        r.readAsDataURL(file);
-    });
-}
-
-function renderImages() {
-    imagesGrid.innerHTML = '';
-    imageCount.textContent = images.length;
-
-    images.forEach((img, i) => {
-        const card = document.createElement('div');
-        card.className = 'image-card';
-        card.innerHTML = `
-            <div class="order-badge">${i + 1}</div>
-            <button class="remove-btn" onclick="removeImage(${i})">×</button>
-            <img src="${img.dataUrl}" alt="${img.name}">
-            <div class="image-name">${img.name}</div>
-            <div class="move-buttons">
-                <button class="move-btn" onclick="moveImage(${i},-1)" ${i === 0 ? 'disabled' : ''}>←</button>
-                <button class="move-btn" onclick="moveImage(${i},1)" ${i === images.length - 1 ? 'disabled' : ''}>→</button>
-            </div>
-        `;
-        imagesGrid.appendChild(card);
-    });
-}
-
-window.moveImage = function(i, dir) {
-    const j = i + dir;
-    if (j < 0 || j >= images.length) return;
-    [images[i], images[j]] = [images[j], images[i]];
-    renderImages();
-};
-
-window.removeImage = function(i) {
-    images.splice(i, 1);
-    if (images.length === 0) { location.reload(); return; }
-    renderImages();
-};
-
-document.getElementById('convertBtn').addEventListener('click', async () => {
-    if (!images.length) { alert('画像を選択してください'); return; }
-
-    showProgress(5);
-    try {
-        const pdfDoc = await PDFLib.PDFDocument.create();
-        const pageSize = document.getElementById('pageSize').value;
-        const layout = document.getElementById('imageLayout').value;
-        const orientation = document.getElementById('pageOrientation').value;
-
-        const SIZES = {
-            a4:     { w: 595,  h: 842  },
-            a3:     { w: 842,  h: 1191 },
-            letter: { w: 612,  h: 792  }
-        };
-
-        for (let i = 0; i < images.length; i++) {
-            showProgress(5 + Math.round((i / images.length) * 85));
-
-            const bytes = await fetch(images[i].dataUrl).then(r => r.arrayBuffer());
-            const isPng = images[i].file.type === 'image/png';
-            const image = isPng ? await pdfDoc.embedPng(bytes) : await pdfDoc.embedJpg(bytes);
-
-            const iw = image.width, ih = image.height;
-            const isLandscape = iw > ih;
-
-            let pw, ph;
-            if (pageSize === 'original') {
-                pw = iw; ph = ih;
-            } else {
-                const s = SIZES[pageSize];
-                let useLandscape;
-                if (orientation === 'auto')        useLandscape = isLandscape;
-                else if (orientation === 'landscape') useLandscape = true;
-                else                                useLandscape = false;
-
-                pw = useLandscape ? s.h : s.w;
-                ph = useLandscape ? s.w : s.h;
-            }
-
-            const page = pdfDoc.addPage([pw, ph]);
-
-            let x, y, w, h;
-            if (layout === 'fill') {
-                w = pw; h = ph; x = 0; y = 0;
-            } else {
-                const scale = Math.min(pw / iw, ph / ih);
-                w = iw * scale;
-                h = ih * scale;
-                x = (pw - w) / 2;
-                y = (ph - h) / 2;
-            }
-
-            page.drawImage(image, { x, y, width: w, height: h });
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDFツール集</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --dark: #1a1a2e;
+            --darker: #0f0f1a;
+            --accent: #e74c3c;
+            --accent2: #3498db;
+            --text: #ecf0f1;
+            --text-muted: #95a5a6;
+            --card-bg: rgba(255,255,255,0.04);
+            --card-border: rgba(255,255,255,0.08);
         }
 
-        showProgress(95);
-        const pdfBytes = await pdfDoc.save();
-        download(pdfBytes, 'images.pdf');
-        showProgress(100);
-        setTimeout(hideProgress, 500);
-        alert('✅ PDFに変換しました！');
-    } catch(e) {
-        alert('変換エラー: ' + e.message);
-        hideProgress();
-    }
-});
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
-document.getElementById('resetBtn').addEventListener('click', () => location.reload());
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            background: var(--darker);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
 
-function showProgress(pct) {
-    progress.style.display = 'block';
-    progressFill.style.width = pct + '%';
-    progressFill.textContent = pct + '%';
-}
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background:
+                radial-gradient(ellipse at 10% 20%, rgba(231,76,60,0.12) 0%, transparent 50%),
+                radial-gradient(ellipse at 90% 80%, rgba(52,152,219,0.1) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: 0;
+        }
 
-function hideProgress() { progress.style.display = 'none'; }
+        .wrapper {
+            position: relative;
+            z-index: 1;
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 60px 20px 80px;
+        }
 
-function download(bytes, name) {
-    const blob = new Blob([bytes], { type: 'application/pdf' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = name;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-}
-</script>
+        header {
+            text-align: center;
+            margin-bottom: 70px;
+            animation: fadeDown 0.8s ease both;
+        }
+
+        .header-icon {
+            font-size: 56px;
+            margin-bottom: 20px;
+            display: block;
+            filter: drop-shadow(0 0 20px rgba(231,76,60,0.5));
+        }
+
+        h1 {
+            font-size: clamp(28px, 5vw, 48px);
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            margin-bottom: 15px;
+            background: linear-gradient(135deg, #ecf0f1 30%, #bdc3c7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            color: var(--text-muted);
+            font-size: 15px;
+            font-weight: 300;
+            letter-spacing: 0.1em;
+        }
+
+        .divider {
+            width: 60px;
+            height: 2px;
+            background: linear-gradient(90deg, var(--accent), var(--accent2));
+            margin: 25px auto 0;
+            border-radius: 2px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            padding: 28px;
+            text-decoration: none;
+            color: inherit;
+            display: flex;
+            align-items: flex-start;
+            gap: 20px;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            animation: fadeUp 0.6s ease both;
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--accent-color, var(--accent)), transparent);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .card:hover {
+            background: rgba(255,255,255,0.07);
+            border-color: rgba(255,255,255,0.15);
+            transform: translateY(-4px);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+        }
+
+        .card:hover::before { opacity: 1; }
+
+        .card:nth-child(1) { animation-delay: 0.1s; --accent-color: #e74c3c; }
+        .card:nth-child(2) { animation-delay: 0.15s; --accent-color: #3498db; }
+        .card:nth-child(3) { animation-delay: 0.2s; --accent-color: #2ecc71; }
+        .card:nth-child(4) { animation-delay: 0.25s; --accent-color: #f39c12; }
+        .card:nth-child(5) { animation-delay: 0.3s; --accent-color: #9b59b6; }
+        .card:nth-child(6) { animation-delay: 0.35s; --accent-color: #1abc9c; }
+        .card:nth-child(7) { animation-delay: 0.4s; --accent-color: #e67e22; }
+
+        .card-icon {
+            font-size: 36px;
+            flex-shrink: 0;
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+
+        .card-body { flex: 1; }
+
+        .card-title {
+            font-size: 17px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: #fff;
+        }
+
+        .card-desc {
+            font-size: 13px;
+            color: var(--text-muted);
+            line-height: 1.7;
+            font-weight: 300;
+        }
+
+        .card-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 14px;
+        }
+
+        .tag {
+            font-size: 11px;
+            padding: 3px 10px;
+            border-radius: 20px;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: var(--text-muted);
+        }
+
+        .card-arrow {
+            position: absolute;
+            right: 20px;
+            bottom: 20px;
+            font-size: 18px;
+            color: rgba(255,255,255,0.15);
+            transition: all 0.3s ease;
+        }
+
+        .card:hover .card-arrow {
+            color: rgba(255,255,255,0.5);
+            transform: translateX(4px);
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 70px;
+            color: var(--text-muted);
+            font-size: 13px;
+            font-weight: 300;
+            animation: fadeUp 0.6s ease 0.5s both;
+        }
+
+        .security-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(46,204,113,0.1);
+            border: 1px solid rgba(46,204,113,0.2);
+            color: #2ecc71;
+            padding: 8px 20px;
+            border-radius: 30px;
+            font-size: 13px;
+            margin-bottom: 20px;
+        }
+
+        @keyframes fadeDown {
+            from { opacity: 0; transform: translateY(-20px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        @media (max-width: 600px) {
+            .grid { grid-template-columns: 1fr; }
+            header { margin-bottom: 40px; }
+        }
+    </style>
+</head>
+<body>
+<div class="wrapper">
+
+    <header>
+        <span class="header-icon">📂</span>
+        <h1>PDF ツール集</h1>
+        <p class="subtitle">ブラウザだけで使える・無料・安全</p>
+        <div class="divider"></div>
+    </header>
+
+    <div class="grid">
+
+        <a class="card" href="分割ツール/">
+            <div class="card-icon">✂️</div>
+            <div class="card-body">
+                <div class="card-title">PDF 分割</div>
+                <div class="card-desc">PDFを1ページずつ、または指定した範囲で分割します。</div>
+                <div class="card-tags">
+                    <span class="tag">全ページ分割</span>
+                    <span class="tag">範囲指定</span>
+                    <span class="tag">Nページごと</span>
+                </div>
+            </div>
+            <span class="card-arrow">→</span>
+        </a>
+
+        <a class="card" href="結合ツール/">
+            <div class="card-icon">🔗</div>
+            <div class="card-body">
+                <div class="card-title">PDF 結合</div>
+                <div class="card-desc">複数のPDFを1つにまとめます。順番の入れ替えも可能。</div>
+                <div class="card-tags">
+                    <span class="tag">複数ファイル</span>
+                    <span class="tag">順番変更</span>
+                    <span class="tag">一括処理</span>
+                </div>
+            </div>
+            <span class="card-arrow">→</span>
+        </a>
+
+        <a class="card" href="編集ツール/">
+            <div class="card-icon">✏️</div>
+            <div class="card-body">
+                <div class="card-title">PDF 編集（注釈）</div>
+                <div class="card-desc">テキスト追加・図形描画・ハイライト・スタンプなど。</div>
+                <div class="card-tags">
+                    <span class="tag">テキスト</span>
+                    <span class="tag">図形</span>
+                    <span class="tag">スタンプ</span>
+                </div>
+            </div>
+            <span class="card-arrow">→</span>
+        </a>
+
+        <a class="card" href="JPEG変換/">
+            <div class="card-icon">🖼️</div>
+            <div class="card-body">
+                <div class="card-title">PDF → JPEG 変換</div>
+                <div class="card-desc">PDFの各ページを高品質なJPEG画像に変換します。</div>
+                <div class="card-tags">
+                    <span class="tag">画質調整</span>
+                    <span class="tag">解像度選択</span>
+                    <span class="tag">ZIP一括DL</span>
+                </div>
+            </div>
+            <span class="card-arrow">→</span>
+        </a>
+
+        <a class="card" href="多機能ツール/">
+            <div class="card-icon">🛠️</div>
+            <div class="card-body">
+                <div class="card-title">PDF 多機能編集</div>
+                <div class="card-desc">ページ削除・回転・OCRテキスト抽出をまとめて。</div>
+                <div class="card-tags">
+                    <span class="tag">ページ削除</span>
+                    <span class="tag">回転</span>
+                    <span class="tag">OCR</span>
+                </div>
+            </div>
+            <span class="card-arrow">→</span>
+        </a>
+
+        <a class="card" href="リネームツール/">
+            <div class="card-icon">🏷️</div>
+            <div class="card-body">
+                <div class="card-title">PDF 一括リネーム</div>
+                <div class="card-desc">複数のPDFを連番やカスタムパターンで一括リネーム。</div>
+                <div class="card-tags">
+                    <span class="tag">連番</span>
+                    <span class="tag">プレフィックス</span>
+                    <span class="tag">ZIP保存</span>
+                </div>
+            </div>
+            <span class="card-arrow">→</span>
+        </a>
+
+        <a class="card" href="向き修正ツール/">
+            <div class="card-icon">🔄</div>
+            <div class="card-body">
+                <div class="card-title">PDF 向き修正</div>
+                <div class="card-desc">スキャンPDFの縦横を自動検出・手動で修正します。</div>
+                <div class="card-tags">
+                    <span class="tag">自動検出</span>
+                    <span class="tag">手動回転</span>
+                    <span class="tag">複数ページ</span>
+                </div>
+            </div>
+            <span class="card-arrow">→</span>
+        </a>
+
+        <a class="card" href="JPEG→PDF変換/">
+            <div class="card-icon">📄</div>
+            <div class="card-body">
+                <div class="card-title">JPEG → PDF 変換</div>
+                <div class="card-desc">複数のJPEG/PNG画像を1つのPDFファイルにまとめます。</div>
+                <div class="card-tags">
+                    <span class="tag">複数画像</span>
+                    <span class="tag">順番変更</span>
+                    <span class="tag">ページ設定</span>
+                </div>
+            </div>
+            <span class="card-arrow">→</span>
+        </a>
+
+    </div>
+
+    <footer>
+        <div class="security-badge">
+            🔒 すべての処理はブラウザ内で完結・ファイルは外部に送信されません
+        </div>
+        <p>© 2025 PDF Tools — 完全無料・登録不要</p>
+    </footer>
+
+</div>
 </body>
 </html>
