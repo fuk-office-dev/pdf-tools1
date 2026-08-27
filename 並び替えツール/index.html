@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDFページ並び替えツール</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Hiragino Sans','Yu Gothic',Roboto,sans-serif;
+     background:#f5f5f5;padding:20px;color:#333;}
+.container{max-width:1400px;margin:0 auto;}
+h1{text-align:center;margin-bottom:8px;}
+.subtitle{text-align:center;color:#666;margin-bottom:26px;}
+
+.upload{border:3px dashed #ccc;border-radius:12px;padding:50px;text-align:center;
+        background:#fff;transition:all .3s;}
+.upload:hover,.upload.dragover{border-color:#007bff;background:#f0f8ff;}
+.upload .icon{font-size:42px;margin-bottom:10px;}
+.upload .main{font-size:17px;color:#555;}
+.upload .or{color:#aaa;margin:8px 0;}
+.ubtn{display:inline-block;padding:12px 30px;background:#007bff;color:#fff;
+      border-radius:6px;cursor:pointer;font-size:16px;}
+.ubtn:hover{background:#0056b3;}
+input[type="file"]{display:none;}
+
+#editor{display:none;}
+
+/* ツールバー */
+.bar{background:#fff;border-radius:10px;padding:14px 18px;margin-bottom:14px;
+     display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+     box-shadow:0 2px 8px rgba(0,0,0,.07);}
+.bar .title{font-weight:bold;font-size:15px;}
+.bar .label{font-size:13px;color:#777;}
+.bar .sep{width:1px;height:24px;background:#e0e0e0;margin:0 4px;}
+.spacer{margin-left:auto;}
+
+.selbar{background:#e7f3ff;border:1px solid #b3d9ff;border-radius:10px;
+        padding:12px 18px;margin-bottom:14px;display:none;
+        align-items:center;gap:10px;flex-wrap:wrap;}
+.selbar.on{display:flex;}
+.selbar .count{font-weight:bold;color:#004085;font-size:14px;}
+
+.btn{padding:10px 20px;border:none;border-radius:6px;cursor:pointer;font-size:14px;
+     transition:background .2s;white-space:nowrap;}
+.btn-primary{background:#28a745;color:#fff;}
+.btn-primary:hover{background:#218838;}
+.btn-secondary{background:#6c757d;color:#fff;}
+.btn-secondary:hover{background:#5a6268;}
+.btn-danger{background:#dc3545;color:#fff;}
+.btn-danger:hover{background:#c82333;}
+.btn-outline{background:#fff;border:1px solid #007bff;color:#007bff;}
+.btn-outline:hover:not(:disabled){background:#007bff;color:#fff;}
+.btn-outline:disabled{border-color:#ddd;color:#ccc;cursor:not-allowed;}
+
+.info{background:#fff;border-left:4px solid #007bff;padding:13px 16px;
+      border-radius:7px;margin-bottom:18px;font-size:14px;line-height:1.7;
+      box-shadow:0 2px 8px rgba(0,0,0,.05);}
+
+/* ページ一覧 */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));
+      gap:16px;margin-bottom:24px;}
+
+.pcard{background:#fff;border-radius:10px;padding:12px;text-align:center;
+       box-shadow:0 2px 8px rgba(0,0,0,.08);cursor:grab;transition:all .18s;
+       border:3px solid transparent;position:relative;user-select:none;}
+.pcard:hover{box-shadow:0 5px 18px rgba(0,0,0,.16);transform:translateY(-2px);}
+.pcard.dragging{opacity:.35;cursor:grabbing;}
+.pcard.drop-target{border-color:#007bff;background:#f0f8ff;}
+.pcard.selected{border-color:#007bff;background:#eaf4ff;
+                box-shadow:0 4px 16px rgba(0,123,255,.28);}
+
+.order{position:absolute;top:9px;left:9px;background:#007bff;color:#fff;
+       width:29px;height:29px;border-radius:50%;display:flex;align-items:center;
+       justify-content:center;font-size:13px;font-weight:bold;z-index:2;
+       box-shadow:0 2px 5px rgba(0,0,0,.25);}
+
+.check{position:absolute;top:9px;right:9px;width:24px;height:24px;border-radius:50%;
+       border:2px solid #ccc;background:#fff;z-index:2;display:flex;
+       align-items:center;justify-content:center;font-size:14px;color:transparent;
+       transition:all .15s;}
+.pcard.selected .check{background:#007bff;border-color:#007bff;color:#fff;}
+
+.pcard img{width:100%;height:auto;border:1px solid #eee;border-radius:5px;
+           background:#fafafa;margin-bottom:9px;display:block;pointer-events:none;}
+
+.orig{font-size:11px;color:#999;margin-bottom:9px;}
+
+.minis{display:flex;gap:5px;justify-content:center;}
+.mini{padding:6px 13px;border:1px solid #007bff;background:#fff;color:#007bff;
+      border-radius:5px;cursor:pointer;font-size:13px;font-weight:500;}
+.mini:hover:not(:disabled){background:#007bff;color:#fff;}
+.mini:disabled{border-color:#ddd;color:#ccc;cursor:not-allowed;}
+
+.progress{display:none;margin:18px 0;}
+.pbar{width:100%;height:28px;background:#e9ecef;border-radius:7px;overflow:hidden;}
+.pfill{height:100%;background:linear-gradient(90deg,#007bff,#28a745);transition:width .3s;
+       display:flex;align-items:center;justify-content:center;color:#fff;
+       font-weight:bold;font-size:13px;}
+
+.bottom{background:#fff;border-radius:10px;padding:20px;display:flex;
+        justify-content:center;gap:14px;flex-wrap:wrap;
+        box-shadow:0 2px 8px rgba(0,0,0,.07);}
+
+@media (max-width:600px){.grid{grid-template-columns:repeat(2,1fr);}}
+</style>
+</head>
+<body>
+<div class="container">
+    <h1>PDFページ並び替えツール</h1>
+    <p class="subtitle">1ページずつでも、複数ページまとめてでも移動できます</p>
+
+    <div class="upload" id="upload">
+        <div class="icon">📄</div>
+        <p class="main">PDFをドラッグ&amp;ドロップ</p>
+        <p class="or">または</p>
+        <label for="pdfFile" class="ubtn">ファイルを選択</label>
+        <input type="file" id="pdfFile" accept=".pdf">
+    </div>
+
+    <div class="progress" id="progress">
+        <div class="pbar"><div class="pfill" id="pfill" style="width:0%">0%</div></div>
+    </div>
+
+    <div id="editor">
+        <div class="bar">
+            <span class="title">🔀 並び替え</span>
+            <span class="label" id="pageCount"></span>
+            <div class="sep"></div>
+            <button class="btn btn-outline" id="selectAll">すべて選択</button>
+            <button class="btn btn-outline" id="clearSel">選択を解除</button>
+            <div class="sep"></div>
+            <button class="btn btn-secondary" id="reverseBtn">⇅ 全体を逆順に</button>
+            <button class="btn btn-danger" id="resetBtn">↺ 元の順番に戻す</button>
+            <span class="spacer"></span>
+            <button class="btn btn-primary" id="saveBtn">💾 保存</button>
+        </div>
+
+        <div class="selbar" id="selbar">
+            <span class="count" id="selCount">0 ページ選択中</span>
+            <div class="sep"></div>
+            <span class="label">まとめて移動：</span>
+            <button class="btn btn-outline" id="moveFirst">⇤ 先頭へ</button>
+            <button class="btn btn-outline" id="moveLeft">← 1つ前へ</button>
+            <button class="btn btn-outline" id="moveRight">1つ後ろへ →</button>
+            <button class="btn btn-outline" id="moveLast">末尾へ ⇥</button>
+            <span class="spacer"></span>
+            <span class="label">選択したページをドラッグしても、まとめて移動できます</span>
+        </div>
+
+        <div class="info">
+            💡 <strong>使い方：</strong>
+            ページの右上の丸をクリック、またはカードをクリックすると選択できます（複数選択OK）。
+            <strong>Shiftを押しながらクリック</strong>すると、そこまでの範囲をまとめて選べます。
+            選択した状態で「まとめて移動」ボタンを押すか、選択したページのどれかをドラッグすると、全部一緒に動きます。
+            青い丸の数字が新しいページ番号です。
+        </div>
+
+        <div class="grid" id="grid"></div>
+
+        <div class="bottom">
+            <button class="btn btn-primary" id="saveBtn2">💾 並び替えて保存</button>
+            <button class="btn btn-secondary" id="newFile">🔄 別のファイルを開く</button>
+        </div>
+    </div>
+</div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+
+let pdfDoc = null, pdfBytes = null, total = 0, baseName = '';
+let order = [];            // 現在の並び（元のページ番号）
+let thumbs = {};
+let selected = new Set();  // 選択中の「元ページ番号」
+let lastClicked = null;    // Shift範囲選択用（index）
+let dragIndex = null;
+
+const upload = document.getElementById('upload');
+const editor = document.getElementById('editor');
+const grid = document.getElementById('grid');
+const progress = document.getElementById('progress');
+const pfill = document.getElementById('pfill');
+const selbar = document.getElementById('selbar');
+
+/* ===== 読み込み ===== */
+upload.addEventListener('dragover', e => { e.preventDefault(); upload.classList.add('dragover'); });
+upload.addEventListener('dragleave', () => upload.classList.remove('dragover'));
+upload.addEventListener('drop', e => {
+    e.preventDefault(); upload.classList.remove('dragover');
+    const f = e.dataTransfer.files[0];
+    if (f && f.type === 'application/pdf') load(f);
+});
+document.getElementById('pdfFile').addEventListener('change', e => {
+    if (e.target.files[0]) load(e.target.files[0]);
+});
+
+async function load(file) {
+    showProg(5);
+    try {
+        const buf = await file.arrayBuffer();
+        pdfBytes = buf.slice(0);
+        pdfDoc = await pdfjsLib.getDocument({ data: buf }).promise;
+        total = pdfDoc.numPages;
+        baseName = file.name.replace(/\.pdf$/i, '');
+        order = Array.from({length: total}, (_, i) => i + 1);
+        selected.clear();
+        thumbs = {};
+
+        for (let i = 1; i <= total; i++) {
+            showProg(5 + (i/total) * 90);
+            const page = await pdfDoc.getPage(i);
+            const vp = page.getViewport({ scale: .45 });
+            const cv = document.createElement('canvas');
+            cv.width = vp.width; cv.height = vp.height;
+            await page.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise;
+            thumbs[i] = cv.toDataURL('image/jpeg', .8);
+        }
+
+        upload.style.display = 'none';
+        editor.style.display = 'block';
+        document.getElementById('pageCount').textContent = `全 ${total} ページ`;
+        render();
+        hideProg();
+    } catch(e) {
+        hideProg();
+        alert('読み込みエラー: ' + e.message);
+    }
+}
+
+/* ===== 描画 ===== */
+function render() {
+    grid.innerHTML = '';
+
+    order.forEach((orig, index) => {
+        const card = document.createElement('div');
+        card.className = 'pcard' + (selected.has(orig) ? ' selected' : '');
+        card.draggable = true;
+        card.dataset.index = index;
+
+        card.innerHTML = `
+            <div class="order">${index + 1}</div>
+            <div class="check">✓</div>
+            <img src="${thumbs[orig]}" alt="ページ${orig}">
+            <div class="orig">元のページ ${orig}</div>
+            <div class="minis">
+                <button class="mini" data-act="left"  ${index === 0 ? 'disabled' : ''}>←</button>
+                <button class="mini" data-act="right" ${index === order.length-1 ? 'disabled' : ''}>→</button>
+            </div>`;
+
+        // 単独移動ボタン
+        card.querySelectorAll('.mini').forEach(btn => {
+            btn.addEventListener('click', ev => {
+                ev.stopPropagation();
+                const d = btn.dataset.act === 'left' ? -1 : 1;
+                const j = index + d;
+                if (j < 0 || j >= order.length) return;
+                [order[index], order[j]] = [order[j], order[index]];
+                render();
+            });
+        });
+
+        // 選択
+        card.addEventListener('click', ev => {
+            if (ev.target.closest('.mini')) return;
+
+            if (ev.shiftKey && lastClicked !== null) {
+                const a = Math.min(lastClicked, index), b = Math.max(lastClicked, index);
+                for (let i = a; i <= b; i++) selected.add(order[i]);
+            } else {
+                selected.has(orig) ? selected.delete(orig) : selected.add(orig);
+                lastClicked = index;
+            }
+            render();
+        });
+
+        // ドラッグ
+        card.addEventListener('dragstart', () => {
+            dragIndex = index;
+            card.classList.add('dragging');
+        });
+        card.addEventListener('dragend', () => {
+            card.classList.remove('dragging');
+            document.querySelectorAll('.pcard').forEach(c => c.classList.remove('drop-target'));
+        });
+        card.addEventListener('dragover', ev => {
+            ev.preventDefault();
+            if (dragIndex !== index) card.classList.add('drop-target');
+        });
+        card.addEventListener('dragleave', () => card.classList.remove('drop-target'));
+        card.addEventListener('drop', ev => {
+            ev.preventDefault();
+            card.classList.remove('drop-target');
+            if (dragIndex === null) return;
+
+            const draggedOrig = order[dragIndex];
+            const targetOrig = order[index];
+
+            if (selected.has(draggedOrig) && selected.size > 1) {
+                // 選択したページをまとめて移動
+                if (selected.has(targetOrig)) { dragIndex = null; return; }
+                const block = order.filter(p => selected.has(p));
+                const rest = order.filter(p => !selected.has(p));
+                const pos = rest.indexOf(targetOrig);
+                rest.splice(pos, 0, ...block);
+                order = rest;
+            } else {
+                const moved = order.splice(dragIndex, 1)[0];
+                order.splice(index, 0, moved);
+            }
+            dragIndex = null;
+            render();
+        });
+
+        grid.appendChild(card);
+    });
+
+    updateSelBar();
+}
+
+function updateSelBar() {
+    const n = selected.size;
+    document.getElementById('selCount').textContent = `${n} ページ選択中`;
+    selbar.classList.toggle('on', n > 0);
+
+    const idx = selectedIndices();
+    document.getElementById('moveLeft').disabled  = !n || idx[0] === 0;
+    document.getElementById('moveFirst').disabled = !n || idx[0] === 0;
+    document.getElementById('moveRight').disabled = !n || idx[idx.length-1] === order.length-1;
+    document.getElementById('moveLast').disabled  = !n || idx[idx.length-1] === order.length-1;
+}
+
+function selectedIndices() {
+    const out = [];
+    order.forEach((p, i) => { if (selected.has(p)) out.push(i); });
+    return out;
+}
+
+/* ===== まとめて移動 ===== */
+document.getElementById('moveLeft').addEventListener('click', () => {
+    const idx = selectedIndices();
+    for (const i of idx) {
+        if (i === 0) continue;
+        if (selected.has(order[i-1])) continue;
+        [order[i], order[i-1]] = [order[i-1], order[i]];
+    }
+    render();
+});
+
+document.getElementById('moveRight').addEventListener('click', () => {
+    const idx = selectedIndices().reverse();
+    for (const i of idx) {
+        if (i === order.length - 1) continue;
+        if (selected.has(order[i+1])) continue;
+        [order[i], order[i+1]] = [order[i+1], order[i]];
+    }
+    render();
+});
+
+document.getElementById('moveFirst').addEventListener('click', () => {
+    const block = order.filter(p => selected.has(p));
+    const rest  = order.filter(p => !selected.has(p));
+    order = [...block, ...rest];
+    render();
+});
+
+document.getElementById('moveLast').addEventListener('click', () => {
+    const block = order.filter(p => selected.has(p));
+    const rest  = order.filter(p => !selected.has(p));
+    order = [...rest, ...block];
+    render();
+});
+
+/* ===== 選択操作 ===== */
+document.getElementById('selectAll').addEventListener('click', () => {
+    order.forEach(p => selected.add(p));
+    render();
+});
+document.getElementById('clearSel').addEventListener('click', () => {
+    selected.clear();
+    lastClicked = null;
+    render();
+});
+
+/* ===== 全体操作 ===== */
+document.getElementById('reverseBtn').addEventListener('click', () => {
+    order.reverse();
+    render();
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+    order = Array.from({length: total}, (_, i) => i + 1);
+    selected.clear();
+    lastClicked = null;
+    render();
+});
+
+/* ===== 保存 ===== */
+async function save() {
+    if (order.every((p, i) => p === i + 1)) {
+        alert('順番が変わっていません。');
+        return;
+    }
+    showProg(10);
+    try {
+        const src = await PDFLib.PDFDocument.load(pdfBytes.slice(0));
+        const out = await PDFLib.PDFDocument.create();
+        const pages = await out.copyPages(src, order.map(p => p - 1));
+        pages.forEach(p => out.addPage(p));
+        showProg(85);
+        const bytes = await out.save();
+
+        const blob = new Blob([bytes], { type:'application/pdf' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `${baseName}_並び替え.pdf`;
+        document.body.appendChild(a); a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        showProg(100);
+        setTimeout(hideProg, 500);
+        alert('✅ 並び替えたPDFを保存しました！');
+    } catch(e) {
+        hideProg();
+        alert('保存エラー: ' + e.message);
+    }
+}
+
+document.getElementById('saveBtn').addEventListener('click', save);
+document.getElementById('saveBtn2').addEventListener('click', save);
+document.getElementById('newFile').addEventListener('click', () => location.reload());
+
+/* ===== 進捗 ===== */
+function showProg(pct) {
+    progress.style.display = 'block';
+    const v = Math.round(pct);
+    pfill.style.width = v + '%';
+    pfill.textContent = v + '%';
+}
+function hideProg() { progress.style.display = 'none'; }
+</script>
+</body>
+</html>
